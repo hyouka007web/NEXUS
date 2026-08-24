@@ -1,6 +1,5 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android") // FIX: fehlte komplett, siehe root build.gradle.kts
 }
 
 android {
