@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_base">
+
+    <LinearLayout
+        android:id="@+id/topBar"
+        android:layout_width="0dp"
+        android:layout_height="@dimen/topbar_height"
+        android:background="@color/bg_surface"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="@dimen/space_8"
+        android:orientation="horizontal"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <ImageView
+            android:id="@+id/brandLogo"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:src="@drawable/nexus_logo"
+            android:scaleType="centerCrop"
+            android:contentDescription="@string/app_name" />
+
+        <TextView
+            android:id="@+id/brandName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:text="NEXUS"
+            android:textColor="@color/accent_primary"
+            android:textSize="14sp"
+            android:fontFamily="sans-serif-medium" />
+
+        <ImageButton
+            android:id="@+id/homeButton"
+            android:layout_width="36dp" android:layout_height="40dp"
+            android:background="@drawable/ripple_accent_circle" android:src="@android:drawable/ic_menu_view" app:tint="@color/text_primary" android:contentDescription="Startseite" />
+        <ImageButton
+            android:id="@+id/backButton"
+            android:layout_width="36dp" android:layout_height="40dp"
+            android:background="@drawable/ripple_accent_circle" android:src="@android:drawable/ic_media_previous" app:tint="@color/text_primary" android:contentDescription="Zurück" />
+        <ImageButton
+            android:id="@+id/forwardButton"
+            android:layout_width="36dp" android:layout_height="40dp"
+            android:background="@drawable/ripple_accent_circle" android:src="@android:drawable/ic_media_next" app:tint="@color/text_primary" android:contentDescription="Vorwärts" />
+        <ImageButton
+            android:id="@+id/reloadButton"
+            android:layout_width="36dp" android:layout_height="40dp"
+            android:background="@drawable/ripple_accent_circle" android:src="@android:drawable/ic_popup_sync" app:tint="@color/text_primary" android:contentDescription="Neu laden" />
+
+        <EditText
+            android:id="@+id/urlField"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:paddingHorizontal="12dp"
+            android:fontFamily="monospace"
+            android:textSize="@dimen/type_mono"
+            android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_muted"
+            android:hint="URL oder Suche"
+            android:background="@drawable/ripple_accent"
+            android:imeOptions="actionGo"
+            android:inputType="textUri"
+            android:singleLine="true" />
+
+        <TextView
+            android:id="@+id/shieldBadge"
+            android:layout_width="34dp"
+            android:layout_height="40dp"
+            android:gravity="center"
+            android:text="0"
+            android:textColor="@color/accent_success"
+            android:textSize="@dimen/type_caption" />
+
+        <TextView
+            android:id="@+id/scraperButton"
+            android:layout_width="48dp"
+            android:layout_height="40dp"
+            android:gravity="center"
+            android:text="⌁"
+            android:textColor="@color/accent_primary"
+            android:textSize="22sp"
+            android:background="@drawable/ripple_accent_circle"
+            android:contentDescription="@string/menu_scraper" />
+
+        <ImageButton
+            android:id="@+id/downloadButton"
+            android:layout_width="40dp" android:layout_height="40dp"
+            android:background="@drawable/ripple_accent_circle" android:src="@android:drawable/stat_sys_download_done" app:tint="@color/text_primary" android:contentDescription="Video herunterladen" />
+        <ImageButton
+            android:id="@+id/mediaButton"
+            android:layout_width="40dp" android:layout_height="40dp"
+            android:background="@drawable/ripple_accent_circle" android:src="@android:drawable/ic_menu_slideshow" app:tint="@color/text_primary" android:contentDescription="Mediathek" />
+        <ImageButton
+            android:id="@+id/menuButton"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="@drawable/ripple_accent_circle"
+            android:contentDescription="Menü"
+            android:src="@android:drawable/ic_menu_more"
+            app:tint="@color/text_primary" />
+    </LinearLayout>
+
+    <View
+        android:id="@+id/loadProgress"
+        android:layout_width="0dp"
+        android:layout_height="2dp"
+        android:background="@color/accent_primary"
+        android:visibility="gone"
+        app:layout_constraintTop_toBottomOf="@id/topBar"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <HorizontalScrollView
+        android:id="@+id/tabStripScroll"
+        android:layout_width="0dp"
+        android:layout_height="42dp"
+        android:background="@color/bg_surface"
+        android:scrollbars="none"
+        app:layout_constraintTop_toBottomOf="@id/loadProgress"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <LinearLayout
+            android:id="@+id/tabStrip"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="@dimen/space_8" />
+    </HorizontalScrollView>
+
+    <LinearLayout
+        android:id="@+id/sidebar"
+        android:layout_width="@dimen/sidebar_collapsed_width"
+        android:layout_height="0dp"
+        android:orientation="vertical"
+        android:background="@color/bg_surface"
+        app:layout_constraintTop_toBottomOf="@id/tabStripScroll"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <TextView
+            android:id="@+id/sidebarToggle"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:gravity="center"
+            android:text="›"
+            android:textColor="@color/accent_primary"
+            android:textSize="18sp" />
+
+        <TextView
+            android:id="@+id/sidebarLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="8dp"
+            android:text="NEXUS"
+            android:textColor="@color/accent_primary"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/sidebarActions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_horizontal"
+            android:orientation="vertical" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/contentContainer"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="@color/bg_base"
+        app:layout_constraintTop_toBottomOf="@id/tabStripScroll"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toEndOf="@id/sidebar"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <LinearLayout
+        android:id="@+id/snifferPanel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:minHeight="62dp"
+        android:orientation="vertical"
+        android:background="@color/bg_surface_raised"
+        android:elevation="10dp"
+        android:padding="12dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toEndOf="@id/sidebar"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
