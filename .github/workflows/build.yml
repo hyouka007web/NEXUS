@@ -2,7 +2,7 @@ name: Build NEXUS Debug APK
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "fix/android-build"]
   workflow_dispatch: {}
 
 permissions:
