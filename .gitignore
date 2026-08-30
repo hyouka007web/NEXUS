@@ -1,0 +1,10 @@
+
+build/
+app/build/
+.gradle/
+*.apk
+
+build/
+app/build/
+.gradle/
+*.apk
