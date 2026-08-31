@@ -43,7 +43,7 @@ android {
 }
 
 dependencies {
-    implementation("org.mozilla.geckoview:geckoview-beta:121.0.20231127140843")
+    implementation("org.mozilla.geckoview:geckoview-omni:130.0.20240829073237")
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("com.google.android.material:material:1.13.0")
