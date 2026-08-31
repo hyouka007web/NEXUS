@@ -13,9 +13,9 @@ object VideoDownloader {
     fun download(
         context: Context,
         mediaUrl: String,
-        pageTitle: String,
-        referer: String?,
-        onProgress: (percent: Int) -> Unit
+        pageTitle: String = "Video",
+        referer: String? = null,
+        onProgress: (percent: Int) -> Unit = {}
     ) {
         downloadDirect(context, mediaUrl, pageTitle, referer, onProgress)
     }
