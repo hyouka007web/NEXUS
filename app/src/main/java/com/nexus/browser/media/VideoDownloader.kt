@@ -16,8 +16,8 @@ object VideoDownloader {
         pageTitle: String = "Video",
         referer: String? = null,
         onProgress: (percent: Int) -> Unit = {}
-    ) {
-        downloadDirect(context, mediaUrl, pageTitle, referer, onProgress)
+    ): VideoEntry {
+        return downloadDirect(context, mediaUrl, pageTitle, referer, onProgress)
     }
 
     fun downloadDirect(
@@ -26,14 +26,16 @@ object VideoDownloader {
         pageTitle: String,
         referer: String?,
         onProgress: (Int) -> Unit
-    ) {
+    ): VideoEntry {
         val url = URL(mediaUrl)
         var connection = url.openConnection() as HttpURLConnection
         connection.connectTimeout = 15000
         connection.readTimeout = 15000
         referer?.let { connection.setRequestProperty("Referer", it) }
 
-        val fileName = "${pageTitle.take(30).replace(Regex("[^a-zA-Z0-9]"), "_")}.mp4"
+        val cleanTitle = pageTitle.take(30).replace(Regex("[^a-zA-Z0-9]"), "_")
+        val fileName = "$cleanTitle.mp4"
+        val destFile = File(context.cacheDir, fileName)
         val part = File(context.cacheDir, "$fileName.part")
         var existing = if (part.exists()) part.length() else 0L
 
@@ -86,6 +88,21 @@ object VideoDownloader {
             }
         }
         conn.disconnect()
+
+        if (part.exists()) {
+            part.renameTo(destFile)
+        }
+
+        return VideoEntry(
+            title = pageTitle,
+            filePath = destFile.absolutePath,
+            sourceUrl = mediaUrl,
+            sizeBytes = destFile.length()
+        )
+    }
+
+    fun delete(context: Context, entry: VideoEntry): Boolean {
+        return entry.file.delete()
     }
 
     fun loadIndex(context: Context): List<VideoEntry> {

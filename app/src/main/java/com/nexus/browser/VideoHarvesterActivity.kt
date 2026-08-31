@@ -74,7 +74,7 @@ class VideoHarvesterActivity : AppCompatActivity() {
                 val task = DownloadRepository.start(item.title.ifBlank { "Video" }, item.url)
                 runCatching {
                     VideoDownloader.download(this, item.url, item.title, page) { progress ->
-                        DownloadRepository.update(task, progress.percent)
+                        DownloadRepository.update(task, progress)
                     }
                     DownloadRepository.finish(task)
                     ok++
