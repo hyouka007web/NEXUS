@@ -44,7 +44,7 @@ dependencies {
     implementation("com.google.android.material:material:1.11.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     
-    // GeckoView Dependency (Verifizierter Release-Build)
+    // GeckoView Official Release
     implementation("org.mozilla.geckoview:geckoview:121.0.20240108152208")
 
     implementation("androidx.recyclerview:recyclerview:1.3.2")
