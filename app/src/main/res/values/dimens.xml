@@ -1,0 +1,6 @@
+<resources>
+<dimen name="space_4">4dp</dimen><dimen name="space_8">8dp</dimen><dimen name="space_12">12dp</dimen><dimen name="space_16">16dp</dimen><dimen name="space_24">24dp</dimen><dimen name="space_32">32dp</dimen>
+<dimen name="radius_button">14dp</dimen><dimen name="radius_panel">18dp</dimen><dimen name="radius_pill">28dp</dimen><dimen name="topbar_height">52dp</dimen><dimen name="searchbar_height">52dp</dimen><dimen name="list_row_height">48dp</dimen>
+<dimen name="sidebar_collapsed_width">28dp</dimen><dimen name="sidebar_icon_width">64dp</dimen><dimen name="sidebar_icon_size">40dp</dimen>
+<dimen name="type_display_l">28sp</dimen><dimen name="type_display_m">20sp</dimen><dimen name="type_body">15sp</dimen><dimen name="type_caption">12sp</dimen><dimen name="type_mono">13sp</dimen>
+</resources>

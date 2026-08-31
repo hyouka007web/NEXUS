@@ -1,0 +1,14 @@
+# NEXUS starter blocklist — transparent local rules
+||doubleclick.net^
+||googlesyndication.com^
+||adservice.google.com^
+||adnxs.com^
+||taboola.com^
+||outbrain.com^
+||scorecardresearch.com^
+||zedo.com^
+||ads.example^
+/ads/
+/adserver/
+tracking
+pixel.gif

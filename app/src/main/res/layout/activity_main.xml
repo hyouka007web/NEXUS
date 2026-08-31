@@ -1,0 +1,280 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_base">
+
+    <LinearLayout
+        android:id="@+id/topBar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:background="@color/bg_surface"
+        android:orientation="vertical"
+        android:paddingBottom="@dimen/space_8"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/topbar_height"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="@dimen/space_12">
+
+            <ImageView
+                android:id="@+id/brandLogo"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:src="@drawable/nexus_logo"
+                android:scaleType="centerCrop"
+                android:contentDescription="@string/app_name" />
+
+            <TextView
+                android:id="@+id/brandName"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:text="NEXUS"
+                android:textColor="@color/accent_primary"
+                android:textSize="14sp"
+                android:fontFamily="sans-serif-medium" />
+
+            <TextView
+                android:id="@+id/shieldBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="28dp"
+                android:minWidth="28dp"
+                android:gravity="center"
+                android:paddingHorizontal="8dp"
+                android:text="0"
+                android:background="@drawable/ripple_accent_round"
+                android:textColor="@color/accent_success"
+                android:textSize="@dimen/type_caption"
+                android:layout_marginEnd="@dimen/space_8" />
+
+            <ImageButton
+                android:id="@+id/menuButton"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@drawable/ripple_accent_round"
+                android:contentDescription="Menü"
+                android:src="@android:drawable/ic_menu_more"
+                app:tint="@color/text_primary" />
+        </LinearLayout>
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/searchbar_height"
+            android:layout_marginHorizontal="@dimen/space_12">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/pill_search_bar"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <EditText
+                    android:id="@+id/urlField"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:layout_marginStart="18dp"
+                    android:background="@null"
+                    android:fontFamily="sans-serif"
+                    android:textSize="@dimen/type_body"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/text_muted"
+                    android:hint="URL oder Suche"
+                    android:imeOptions="actionGo"
+                    android:inputType="text"
+                    android:singleLine="true" />
+
+                <ImageButton
+                    android:id="@+id/reloadButton"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:layout_marginEnd="6dp"
+                    android:background="@drawable/ripple_accent_round"
+                    android:src="@android:drawable/ic_popup_sync"
+                    app:tint="@color/text_muted"
+                    android:contentDescription="Neu laden" />
+            </LinearLayout>
+        </FrameLayout>
+    </LinearLayout>
+
+    <View
+        android:id="@+id/loadProgress"
+        android:layout_width="0dp"
+        android:layout_height="2dp"
+        android:background="@color/accent_primary"
+        android:visibility="gone"
+        app:layout_constraintTop_toBottomOf="@id/topBar"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <HorizontalScrollView
+        android:id="@+id/tabStripScroll"
+        android:layout_width="0dp"
+        android:layout_height="42dp"
+        android:background="@color/bg_surface"
+        android:scrollbars="none"
+        app:layout_constraintTop_toBottomOf="@id/loadProgress"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <LinearLayout
+            android:id="@+id/tabStrip"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="@dimen/space_8" />
+    </HorizontalScrollView>
+
+    <LinearLayout
+        android:id="@+id/sidebar"
+        android:layout_width="@dimen/sidebar_collapsed_width"
+        android:layout_height="0dp"
+        android:orientation="vertical"
+        android:background="@color/bg_surface"
+        app:layout_constraintTop_toBottomOf="@id/tabStripScroll"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <TextView
+            android:id="@+id/sidebarToggle"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:gravity="center"
+            android:text="›"
+            android:alpha="0.55"
+            android:textColor="@color/accent_primary"
+            android:textStyle="bold"
+            android:textSize="16sp" />
+
+        <TextView
+            android:id="@+id/sidebarLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="8dp"
+            android:text="NEXUS"
+            android:textColor="@color/accent_primary"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/sidebarActions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_horizontal"
+            android:orientation="vertical" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/contentContainer"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="@color/bg_base"
+        app:layout_constraintTop_toBottomOf="@id/tabStripScroll"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toEndOf="@id/sidebar"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <LinearLayout
+        android:id="@+id/startPageContainer"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="@color/bg_base"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:paddingHorizontal="@dimen/space_32"
+        android:visibility="gone"
+        app:layout_constraintTop_toBottomOf="@id/tabStripScroll"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toEndOf="@id/sidebar"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <ImageView
+            android:layout_width="72dp"
+            android:layout_height="72dp"
+            android:src="@drawable/nexus_logo"
+            android:contentDescription="@string/app_name" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_12"
+            android:text="NEXUS"
+            android:textColor="@color/accent_primary"
+            android:textSize="@dimen/type_display_m"
+            android:fontFamily="sans-serif-medium" />
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/searchbar_height"
+            android:layout_marginTop="@dimen/space_24">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/pill_search_bar"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <EditText
+                    android:id="@+id/startSearchField"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:layout_marginStart="18dp"
+                    android:background="@null"
+                    android:textSize="@dimen/type_body"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/text_muted"
+                    android:hint="Suchen oder Adresse eingeben"
+                    android:imeOptions="actionSearch"
+                    android:inputType="text"
+                    android:singleLine="true" />
+
+                <ImageButton
+                    android:id="@+id/startSearchButton"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:layout_marginEnd="6dp"
+                    android:background="@drawable/ripple_accent_round"
+                    android:src="@android:drawable/ic_menu_search"
+                    app:tint="@color/accent_primary"
+                    android:contentDescription="Suchen" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/startEngineLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_16"
+            android:textColor="@color/text_muted"
+            android:textSize="@dimen/type_caption"
+            android:text="Suchmaschine: DuckDuckGo · ändern in Einstellungen" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/snifferPanel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:minHeight="62dp"
+        android:orientation="vertical"
+        android:background="@drawable/rounded_card_top"
+        android:elevation="10dp"
+        android:padding="12dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toEndOf="@id/sidebar"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
