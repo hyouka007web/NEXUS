@@ -10,6 +10,16 @@ import java.net.URL
 object VideoDownloader {
     private const val BUFFER = 8192
 
+    fun download(
+        context: Context,
+        mediaUrl: String,
+        pageTitle: String,
+        referer: String?,
+        onProgress: (percent: Int) -> Unit
+    ) {
+        downloadDirect(context, mediaUrl, pageTitle, referer, onProgress)
+    }
+
     fun downloadDirect(
         context: Context,
         mediaUrl: String,
@@ -76,5 +86,17 @@ object VideoDownloader {
             }
         }
         conn.disconnect()
+    }
+
+    fun loadIndex(context: Context): List<VideoEntry> {
+        val dir = context.cacheDir
+        return dir.listFiles { _, name -> name.endsWith(".mp4") }?.map { file ->
+            VideoEntry(
+                title = file.nameWithoutExtension,
+                filePath = file.absolutePath,
+                sizeBytes = file.length(),
+                downloadedAt = file.lastModified()
+            )
+        } ?: emptyList()
     }
 }
