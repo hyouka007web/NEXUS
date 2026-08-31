@@ -82,7 +82,7 @@ class MainActivity : AppCompatActivity() {
         if (url == "https://start.duckduckgo.com") startPage else url
 
     private fun persistTabs() {
-        val saved = tabManager.tabs.map { SavedTab(it.url, it.title) }
+        val saved = tabManager.tabs.map { SavedTab(it.url, it.name) }
         TabPersistence.save(this, saved, tabManager.activeIndex)
     }
 
