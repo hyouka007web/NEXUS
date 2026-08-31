@@ -22,7 +22,7 @@ class RedirectShield(
     private var lastLoadAt = 0L
     private var lastGestureAt = 0L
 
-    override fun onLocationChange(
+    fun onLocationChange(
         session: GeckoSession,
         url: String?,
         perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>,
