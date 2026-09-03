@@ -5,12 +5,12 @@ plugins {
 
 android {
     namespace = "com.nexus.browser"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.nexus.browser"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 37
         versionCode = 4
         versionName = "0.4.0"
 
