@@ -30,22 +30,37 @@ class RedirectShield(
     @Volatile var pendingAppNavigation: Boolean = false
 
     private var currentDomain: String? = null
-    private var lastLoadAt = 0L
     private var lastGestureAt = 0L
 
-    fun onLocationChange(
+    /** True between onPageStart and onPageStop. Sites like Google routinely chain
+     *  several server/JS redirects (consent, region, https-upgrade) as part of a
+     *  single navigation *before* the page has finished loading — that's normal
+     *  and must not be blocked. The dangerous pattern this shield targets is a
+     *  redirect fired by page JS *after* the page has already settled (classic
+     *  malvertising "wait a few seconds, then bounce the user away"). Gating on
+     *  isLoading instead of a fixed time window tells these two cases apart
+     *  reliably, instead of guessing via an arbitrary millisecond cutoff. */
+    @Volatile private var isLoading = false
+
+    override fun onLocationChange(
         session: GeckoSession,
         url: String?,
         perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>,
         hasUserGesture: Boolean
     ) {
         currentDomain = url?.let { Uri.parse(it).host?.lowercase() }
-        lastLoadAt = SystemClock.elapsedRealtime()
         if (hasUserGesture) lastGestureAt = SystemClock.elapsedRealtime()
     }
 
-    override fun onPageStart(session: GeckoSession, url: String) = onLoadingStateChange(true)
-    override fun onPageStop(session: GeckoSession, success: Boolean) = onLoadingStateChange(false)
+    override fun onPageStart(session: GeckoSession, url: String) {
+        isLoading = true
+        onLoadingStateChange(true)
+    }
+
+    override fun onPageStop(session: GeckoSession, success: Boolean) {
+        isLoading = false
+        onLoadingStateChange(false)
+    }
 
     override fun onLoadRequest(
         session: GeckoSession,
@@ -63,8 +78,7 @@ class RedirectShield(
 
         val host = uri.host?.lowercase()
         val crossDomain = currentDomain != null && host != null && host != currentDomain
-        val fastRedirect = SystemClock.elapsedRealtime() - lastLoadAt < 4000L
-        if (!isAppNavigation && !request.hasUserGesture && crossDomain && fastRedirect) {
+        if (!isAppNavigation && !request.hasUserGesture && crossDomain && !isLoading) {
             Log.i("NEXUS", "Blocked redirect: ${request.uri}")
             onBlocked(request.uri, BlockReason.REDIRECT_NO_GESTURE)
             return GeckoResult.deny()

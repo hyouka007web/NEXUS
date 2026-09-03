@@ -7,6 +7,7 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.util.Locale
 import java.util.regex.Pattern
+import java.util.zip.GZIPInputStream
 
 /**
  * Public-resource scraper. It inspects the delivered HTML only; it does not bypass
@@ -96,7 +97,11 @@ object ScraperEngine {
         c.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/json,text/plain,*/*;q=0.8")
         c.setRequestProperty("Accept-Encoding", "gzip")
         return try {
-            val bytes = c.inputStream.use { it.readNBytes(MAX_HTML_BYTES) }
+            val isGzip = c.contentEncoding?.equals("gzip", ignoreCase = true) == true
+            val bytes = c.inputStream.use { raw ->
+                val stream = if (isGzip) GZIPInputStream(raw) else raw
+                stream.use { it.readNBytes(MAX_HTML_BYTES) }
+            }
             Response(bytes.toString(StandardCharsets.UTF_8), c.url.toString())
         } finally { c.disconnect() }
     }

@@ -3,3 +3,5 @@ build/
 app/build/
 *.iml
 .idea/
+*.apk
+NEXUS-app-debug/
