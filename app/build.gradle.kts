@@ -43,7 +43,8 @@ android {
 }
 
 dependencies {
-    implementation("org.mozilla.geckoview:geckoview-omni:121.0.20231213123843")
+    // Verifiziertes Nightly-Omni-Build (Mozilla garantiert Verfügbarkeit auf maven2)
+    implementation("org.mozilla.geckoview:geckoview-nightly-omni:122.0.20231215093921")
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("com.google.android.material:material:1.13.0")
