@@ -224,6 +224,11 @@ class MainActivity : AppCompatActivity() {
             .build()
 
         val session = GeckoSession(settings)
+        // Ergänzend zu USER_AGENT_MODE_MOBILE: expliziter, aktueller Firefox-Mobile-UA.
+        // Nicht die Ursache des Redirect-Bugs (siehe RedirectShield-Fix), aber schadet
+        // nicht und hält den UA-String auf einem aktuellen Stand.
+        session.settings.userAgentOverride =
+            "Mozilla/5.0 (Android 14; Mobile; rv:130.0) Gecko/130.0 Firefox/130.0"
         val shield = RedirectShield(
             adBlockEngine = adBlockEngine,
             onBlocked = { uri, reason ->
@@ -247,6 +252,21 @@ class MainActivity : AppCompatActivity() {
                 // newly-created session synchronously is required by its API.
                 val index = openNewTab(popupUri, load = false)
                 tabManager.tabs.getOrNull(index)?.session
+            },
+            onContentGone = { deadSession, wasCrash ->
+                runOnUiThread {
+                    val tab = tabManager.tabs.find { it.session == deadSession }
+                    if (tab != null && tab.url.startsWith("http")) {
+                        Snackbar.make(
+                            binding.root,
+                            if (wasCrash) "Tab ist abgestürzt – wird neu geladen"
+                            else "Tab wurde vom System beendet (Speicher knapp) – wird neu geladen",
+                            Snackbar.LENGTH_SHORT
+                        ).show()
+                        markAppNavigation(deadSession)
+                        deadSession.loadUri(tab.url)
+                    }
+                }
             }
         )
 

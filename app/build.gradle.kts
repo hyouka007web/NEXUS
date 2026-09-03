@@ -43,8 +43,7 @@ android {
 }
 
 dependencies {
-    // Existierendes GeckoView Omni Release Artefakt
-    implementation("org.mozilla.geckoview:geckoview-omni:128.0.20240704121409")
+    implementation("org.mozilla.geckoview:geckoview:154.0.20260814215756")
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("com.google.android.material:material:1.13.0")

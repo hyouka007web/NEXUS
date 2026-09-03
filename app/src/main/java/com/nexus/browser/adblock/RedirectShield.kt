@@ -13,7 +13,8 @@ class RedirectShield(
     private val onBlocked: (uri: String, reason: BlockReason) -> Unit,
     private val onTitleUpdate: (session: GeckoSession, title: String?) -> Unit,
     private val onLoadingStateChange: (loading: Boolean) -> Unit,
-    private val onAllowedPopup: (uri: String) -> GeckoSession?
+    private val onAllowedPopup: (uri: String) -> GeckoSession?,
+    private val onContentGone: (session: GeckoSession, wasCrash: Boolean) -> Unit
 ) : GeckoSession.NavigationDelegate, GeckoSession.ContentDelegate, GeckoSession.ProgressDelegate {
 
     enum class BlockReason { AD_HOST, POPUP_NO_GESTURE, REDIRECT_NO_GESTURE }
@@ -115,6 +116,27 @@ class RedirectShield(
 
     override fun onTitleChange(session: GeckoSession, title: String?) {
         onTitleUpdate(session, title)
+    }
+
+    /** The Gecko content (renderer) process crashed outright — usually a native
+     *  crash inside the engine itself. The GeckoSession object survives on the
+     *  Java side, but its surface stays permanently blank/black until reloaded;
+     *  nothing did that automatically before, which is why a crashed tab looked
+     *  "dead" forever while a *new* tab (fresh content process) worked fine. */
+    override fun onCrash(session: GeckoSession) {
+        isLoading = false
+        onLoadingStateChange(false)
+        onContentGone(session, true)
+    }
+
+    /** The content process was killed by the system (typically the low-memory/
+     *  OOM killer under memory pressure — common on devices with little RAM,
+     *  e.g. right after opening a heavy page or a second activity like the
+     *  Video Harvester). Same fix as onCrash: reload instead of staying blank. */
+    override fun onKill(session: GeckoSession) {
+        isLoading = false
+        onLoadingStateChange(false)
+        onContentGone(session, false)
     }
 
     override fun onLoadError(

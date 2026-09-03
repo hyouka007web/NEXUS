@@ -84,7 +84,7 @@ object VideoDownloader {
                 if (existing > 0) setRequestProperty("Range", "bytes=$existing-")
             }
             responseCode = connection.responseCode
-            if (responseCode == 416) {
+            if (responseCode == HttpURLConnection.HTTP_REQUESTED_RANGE_NOT_SATISFIABLE) {
                 existing = 0
                 part.delete()
                 connection.disconnect()
