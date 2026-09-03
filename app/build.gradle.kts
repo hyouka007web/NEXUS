@@ -43,8 +43,8 @@ android {
 }
 
 dependencies {
-    // Verifizierte GeckoView Release Build Version
-    implementation("org.mozilla.geckoview:geckoview:121.0.20231215093921")
+    // GeckoView Channel-Artefakt mit direkter Maven-Auflösung
+    implementation("org.mozilla.geckoview:geckoview-omni-arm64-v8a:121.0.20231204155522")
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("com.google.android.material:material:1.13.0")
