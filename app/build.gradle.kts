@@ -1,6 +1,5 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
 }
 
 android {
@@ -42,10 +41,19 @@ android {
     }
 }
 
+configurations.all {
+    resolutionStrategy {
+        // AGP 9's built-in Kotlin compiler ships as 2.2.x. Last attempt at
+        // built-in Kotlin (v0.4.7) failed because some dependency pulled in
+        // kotlin-stdlib 2.4.10 transitively and Gradle's normal "highest
+        // wins" resolution picked that over what we declared — the compiler
+        // then couldn't read its own metadata format. force() overrides
+        // that resolution instead of just adding another candidate version.
+        force("org.jetbrains.kotlin:kotlin-stdlib:2.2.10")
+    }
+}
+
 dependencies {
-    // Explizit gepinnt, damit keine transitive Abhängigkeit (z.B. GeckoView)
-    // eine neuere stdlib reinzieht, die der Kotlin-Compiler nicht mehr lesen kann.
-    implementation("org.jetbrains.kotlin:kotlin-stdlib:2.2.10")
     implementation("org.mozilla.geckoview:geckoview:154.0.20260814215756")
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.appcompat:appcompat:1.7.1")
