@@ -84,7 +84,10 @@ object VideoDownloader {
                 if (existing > 0) setRequestProperty("Range", "bytes=$existing-")
             }
             responseCode = connection.responseCode
-            if (responseCode == HttpURLConnection.HTTP_REQUESTED_RANGE_NOT_SATISFIABLE) {
+            // java.net.HttpURLConnection hat keine Konstante für 416 (Range Not
+            // Satisfiable) — anders als z.B. HTTP_OK oder HTTP_PARTIAL ist das
+            // kein Standardfeld der Klasse, deshalb hier der Literalwert.
+            if (responseCode == 416) {
                 existing = 0
                 part.delete()
                 connection.disconnect()
