@@ -1,5 +1,6 @@
 plugins {
     id("com.android.application")
+    id("org.jetbrains.kotlin.android")
 }
 
 android {
@@ -42,6 +43,9 @@ android {
 }
 
 dependencies {
+    // Explizit gepinnt, damit keine transitive Abhängigkeit (z.B. GeckoView)
+    // eine neuere stdlib reinzieht, die der Kotlin-Compiler nicht mehr lesen kann.
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:2.2.10")
     implementation("org.mozilla.geckoview:geckoview:154.0.20260814215756")
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.appcompat:appcompat:1.7.1")
