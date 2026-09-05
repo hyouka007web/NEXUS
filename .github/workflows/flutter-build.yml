@@ -30,7 +30,11 @@ jobs:
           channel: "stable"
 
       - name: Android-Plattformordner erzeugen (fehlt im Repo, wird nicht committed)
-        run: flutter create --platforms=android --org com.nexus.browser .
+        # --project-name explizit gesetzt: ohne das leitet "flutter create ."
+        # den Namen vom aktuellen Ordner ab — und der heißt hier "NEXUS"
+        # (Großbuchstaben, kommt vom Repo-Namen), was kein gültiger
+        # Dart-Paketname ist. Muss zu "name:" in pubspec.yaml passen.
+        run: flutter create --platforms=android --org com.nexus.browser --project-name nexus_flutter .
 
       - run: flutter pub get
       - run: flutter build apk --debug
@@ -51,7 +55,7 @@ jobs:
           channel: "stable"
 
       - name: Windows-Plattformordner erzeugen (fehlt im Repo, wird nicht committed)
-        run: flutter create --platforms=windows --org com.nexus.browser .
+        run: flutter create --platforms=windows --org com.nexus.browser --project-name nexus_flutter .
 
       - run: flutter pub get
       - run: flutter build windows --debug
@@ -77,7 +81,7 @@ jobs:
           channel: "stable"
 
       - name: Linux-Plattformordner erzeugen (fehlt im Repo, wird nicht committed)
-        run: flutter create --platforms=linux --org com.nexus.browser .
+        run: flutter create --platforms=linux --org com.nexus.browser --project-name nexus_flutter .
 
       - name: CEF-Link-Include eintragen (von flutter_linux_webview vorgeschrieben)
         # Laut Doku des Pakets muss diese Zeile manuell nach
