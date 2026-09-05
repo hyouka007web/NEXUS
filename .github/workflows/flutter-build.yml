@@ -1,0 +1,99 @@
+name: Build NEXUS (Flutter, Stufe 0)
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  # Manuell startbar über den Actions-Tab, ohne extra Commit — praktisch
+  # zum Wiederholen eines Builds nach einer reinen Konfigurationsänderung.
+  workflow_dispatch:
+
+env:
+  FLUTTER_VERSION: "3.24.5"
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JDK 17 (für Android-Gradle-Build)
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: "stable"
+
+      - name: Android-Plattformordner erzeugen (fehlt im Repo, wird nicht committed)
+        run: flutter create --platforms=android --org com.nexus.browser .
+
+      - run: flutter pub get
+      - run: flutter build apk --debug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexus-flutter-android-debug
+          path: build/app/outputs/flutter-apk/app-debug.apk
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: "stable"
+
+      - name: Windows-Plattformordner erzeugen (fehlt im Repo, wird nicht committed)
+        run: flutter create --platforms=windows --org com.nexus.browser .
+
+      - run: flutter pub get
+      - run: flutter build windows --debug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexus-flutter-windows-debug
+          path: build/windows/x64/runner/Debug/
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Linux-Build-Abhängigkeiten (GTK, CMake, Ninja)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libgtk-3-dev liblzma-dev clang cmake pkg-config
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: "stable"
+
+      - name: Linux-Plattformordner erzeugen (fehlt im Repo, wird nicht committed)
+        run: flutter create --platforms=linux --org com.nexus.browser .
+
+      - name: CEF-Link-Include eintragen (von flutter_linux_webview vorgeschrieben)
+        # Laut Doku des Pakets muss diese Zeile manuell nach
+        # "add_executable(${BINARY_NAME})" in linux/CMakeLists.txt stehen,
+        # sonst hängt sich der Build beim ersten Start der WebView auf.
+        # Da wir CMakeLists.txt hier automatisch neu erzeugen lassen (siehe
+        # .gitignore-Begründung), tragen wir die Zeile bei jedem Lauf per
+        # sed neu ein, statt sie von Hand in einer committeten Datei zu
+        # pflegen, die sonst mit künftigen Flutter-Versionen auseinanderdriften könnte.
+        run: |
+          sed -i '/add_executable(\${BINARY_NAME})/a include(flutter/ephemeral/.plugin_symlinks/flutter_linux_webview/linux/cmake/link_to_cef_library.cmake)' linux/CMakeLists.txt
+
+      - run: flutter pub get
+      - run: flutter build linux --debug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexus-flutter-linux-debug
+          path: build/linux/x64/debug/bundle/

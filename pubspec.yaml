@@ -1,0 +1,52 @@
+name: nexus_flutter
+description: >
+  NEXUS (Flutter) — Werkzeug-Test-Gerüst mit WebView auf Android, Windows
+  und Linux, plus den nach Dart portierten Engines aus dem Kotlin-Original:
+  Scraper (ScraperEngine), Video Harvester (VideoHarvesterEngine,
+  YtDlpStyleExtractor, MediaLinkFinder) und Downloader (VideoDownloader,
+  DownloadRepository) inklusive einer Test-Oberfläche dafür
+  (ToolsTestScreen). Noch ohne das eigentliche NEXUS-UI (Tabs, Adressleiste,
+  Mediathek-Ansicht) und ohne Ad-Block/Redirect-Shield — die kommen in den
+  nächsten Stufen.
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+  flutter: '>=3.22.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Android: offizielles Paket, nutzt Androids System-WebView (Chromium).
+  # Läuft "out of the box" auch unter dieser Version — keine Sonderkonfiguration.
+  webview_flutter: 3.0.4
+  # main.dart importiert dieses Paket direkt (für SurfaceAndroidWebView) —
+  # pub verlangt dafür eine direkte Deklaration, auch wenn webview_flutter
+  # es selbst schon transitiv mitbringt. Keine feste Version: der Resolver
+  # pickt die zu webview_flutter 3.0.4 passende automatisch.
+  webview_flutter_android: any
+
+  # Windows: separates Community-Paket (WebView2 / Edge-Chromium). Hat eine
+  # ANDERE API als webview_flutter (eigenes Widget, kein WebViewController).
+  webview_windows: ^0.4.0
+
+  # Linux: Shim, der sich als Linux-Implementierung für webview_flutter
+  # registriert (CEF/Chromium dahinter). Deshalb die feste Version 3.0.4
+  # oben — dieses Paket ist an genau diese webview_flutter-Version gebunden.
+  # ACHTUNG: laut eigener Doku instabil ("hängt oder stürzt auf manchen
+  # Systemen ab"). Das ist der Teil, den wir zuletzt und mit Testern prüfen.
+  flutter_linux_webview: ^0.1.3
+
+  # Für den Video-Downloader: app-privates Speicherverzeichnis, plattform-
+  # unabhängig (entspricht Kotlins context.filesDir).
+  path_provider: ^2.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
