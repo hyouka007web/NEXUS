@@ -20,24 +20,21 @@ dependencies:
     sdk: flutter
 
   # Android: offizielles Paket, nutzt Androids System-WebView (Chromium).
-  # Läuft "out of the box" auch unter dieser Version — keine Sonderkonfiguration.
-  webview_flutter: 3.0.4
-  # main.dart importiert dieses Paket direkt (für SurfaceAndroidWebView) —
-  # pub verlangt dafür eine direkte Deklaration, auch wenn webview_flutter
-  # es selbst schon transitiv mitbringt. Keine feste Version: der Resolver
-  # pickt die zu webview_flutter 3.0.4 passende automatisch.
-  webview_flutter_android: any
+  # v4.x ist die aktuell gepflegte Version — v3.0.4 (früher hier gepinnt)
+  # zieht eine so alte webview_flutter_android-Version, dass deren AAR noch
+  # keinen "namespace" deklariert und an modernen Android-Gradle-Plugin-
+  # Versionen mit "Namespace not specified" scheitert. Das war der Grund
+  # für den ersten CI-Fehlschlag hier.
+  webview_flutter: ^4.10.0
 
   # Windows: separates Community-Paket (WebView2 / Edge-Chromium). Hat eine
   # ANDERE API als webview_flutter (eigenes Widget, kein WebViewController).
   webview_windows: ^0.4.0
 
-  # Linux: Shim, der sich als Linux-Implementierung für webview_flutter
-  # registriert (CEF/Chromium dahinter). Deshalb die feste Version 3.0.4
-  # oben — dieses Paket ist an genau diese webview_flutter-Version gebunden.
-  # ACHTUNG: laut eigener Doku instabil ("hängt oder stürzt auf manchen
-  # Systemen ab"). Das ist der Teil, den wir zuletzt und mit Testern prüfen.
-  flutter_linux_webview: ^0.1.3
+  # Linux: KEIN WebView-Paket mehr hier — siehe README, Abschnitt "Linux
+  # pausiert". flutter_linux_webview war an die alte webview_flutter-3.0.4-
+  # API gekettet und daher inkompatibel mit dem Upgrade auf 4.x oben; eine
+  # gepflegte Alternative für Linux+CEF gibt es aktuell nicht.
 
   # Für den Video-Downloader: app-privates Speicherverzeichnis, plattform-
   # unabhängig (entspricht Kotlins context.filesDir).

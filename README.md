@@ -18,28 +18,43 @@ Flutter-Version nicht mehr zusammenpasst, erzeugt der CI-Workflow
 über `flutter create --platforms=... .` — passend zur jeweils installierten
 Flutter-Version. `pubspec.yaml` und `lib/` bleiben davon unberührt.
 
+## Linux pausiert (Stand: nach dem ersten echten CI-Fehlschlag)
+
+Der erste Android-Build ist an `webview_flutter 3.0.4` gescheitert
+("Namespace not specified" — diese alte Version zieht eine
+`webview_flutter_android`-Fassung, die noch keinen `namespace` deklariert,
+was moderne Android-Gradle-Plugin-Versionen zwingend verlangen). Der Fix
+(Upgrade auf `webview_flutter ^4.10.0`, die aktuell gepflegte Version) hat
+aber einen Nebeneffekt: `flutter_linux_webview` — das einzige verfügbare
+Linux-WebView-Paket, CEF-basiert — ist fest an die alte 3.0.4-API gekettet.
+**pub kann nicht zwei Hauptversionen desselben Pakets gleichzeitig
+auflösen**, das ist keine Konfigurationsfrage, sondern eine harte Grenze.
+
+Entscheidung: Android + Windows laufen jetzt auf der modernen, gepflegten
+Basis. Linux zeigt stattdessen einen expliziten Hinweisbildschirm statt
+einer WebView — ehrlich sichtbar, nicht stillschweigend kaputt. Scraper,
+Video Harvester und Downloader funktionieren unter Linux trotzdem
+uneingeschränkt, die hängen an keiner WebView-Engine.
+
+Falls Linux-WebView-Unterstützung später wichtig wird: entweder eine
+gepflegte, auf `webview_flutter` 4.x oder eine eigene Platform-Channel-Lösung
+aufbauende Alternative suchen, oder für Linux komplett auf ein eigenes
+CEF-Embedding ohne den `webview_flutter`-Plugin-Unterbau umsteigen (mehr
+Aufwand, aber unabhängig von diesem Versionskonflikt).
+
 ## Wer testet was
 
 - **Android:** du, direkt auf deinem Handy (APK aus dem Actions-Artifact
   installieren, wie beim Kotlin-NEXUS).
-- **Windows + Linux:** dein Tester-Freund, jeweils auf echter Hardware.
-  Besonders beim Linux-Build (CEF-Plugin, siehe unten) ist echtes Feedback
-  wichtig — das lässt sich nicht aus dem CI-Log allein beurteilen.
-
-## Bekanntes Risiko: Linux
-
-Für Linux gibt es kein offizielles "System-WebView" wie bei Android/Windows.
-Das genutzte Paket `flutter_linux_webview` bettet Chromium über CEF ein und
-ist laut eigener Dokumentation ausdrücklich als instabil markiert ("hängt
-oder stürzt auf manchen Systemen ab"). Falls der Linux-Build bei deinem
-Tester nicht startet oder abstürzt: das ist erwartbar und der Punkt, an dem
-wir entscheiden müssen, ob wir dabei bleiben oder für Linux einen anderen
-Weg suchen.
+- **Windows:** dein Tester-Freund.
+- **Linux:** aktuell nur der Werkzeug-Test-Screen (Scraper/Harvester/
+  Downloader) sinnvoll testbar, siehe oben — die WebView selbst zeigt
+  bewusst nur einen Hinweistext.
 
 ## Build lokal (falls dein Tester-Freund das lieber selbst macht)
 
 ```bash
-flutter create --platforms=windows,linux --org com.nexus.browser .
+flutter create --platforms=windows,linux --org com.nexus.browser --project-name nexus_flutter .
 flutter pub get
 flutter build windows --debug   # bzw. linux
 ```

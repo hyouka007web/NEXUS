@@ -83,17 +83,6 @@ jobs:
       - name: Linux-Plattformordner erzeugen (fehlt im Repo, wird nicht committed)
         run: flutter create --platforms=linux --org com.nexus.browser --project-name nexus_flutter .
 
-      - name: CEF-Link-Include eintragen (von flutter_linux_webview vorgeschrieben)
-        # Laut Doku des Pakets muss diese Zeile manuell nach
-        # "add_executable(${BINARY_NAME})" in linux/CMakeLists.txt stehen,
-        # sonst hängt sich der Build beim ersten Start der WebView auf.
-        # Da wir CMakeLists.txt hier automatisch neu erzeugen lassen (siehe
-        # .gitignore-Begründung), tragen wir die Zeile bei jedem Lauf per
-        # sed neu ein, statt sie von Hand in einer committeten Datei zu
-        # pflegen, die sonst mit künftigen Flutter-Versionen auseinanderdriften könnte.
-        run: |
-          sed -i '/add_executable(\${BINARY_NAME})/a include(flutter/ephemeral/.plugin_symlinks/flutter_linux_webview/linux/cmake/link_to_cef_library.cmake)' linux/CMakeLists.txt
-
       - run: flutter pub get
       - run: flutter build linux --debug
 

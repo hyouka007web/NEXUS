@@ -3,36 +3,14 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:webview_windows/webview_windows.dart' as win;
-
-// Linux nutzt denselben package:webview_flutter-API-Oberbau wie Android,
-// nur mit anderer Plattform-Engine dahinter (CEF statt Android-WebView).
-// Das Paket registriert sich selbst als Linux-Implementierung — daher hier
-// kein eigenständiger Import einer anderen Widget-Klasse nötig wie bei
-// Windows, sondern nur eine Plattform-Weiche unten in main().
-import 'package:flutter_linux_webview/flutter_linux_webview.dart' as linux_webview;
 
 import 'screens/tools_test_screen.dart';
 
 const String testUrl = 'https://example.com';
 
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Android: explizit Surface-basiertes Rendering statt virtuellem Display.
-  // Standard-Empfehlung für webview_flutter 3.x, stabiler auf schwächeren
-  // Geräten und bei Hardware-Beschleunigung.
-  if (!kIsWeb && Platform.isAndroid) {
-    WebView.platform = SurfaceAndroidWebView();
-  }
-
-  // Linux: CEF-Prozess muss vor runApp() initialisiert werden.
-  if (!kIsWeb && Platform.isLinux) {
-    await linux_webview.LinuxWebViewPlugin.initialize();
-    WebView.platform = linux_webview.LinuxWebView();
-  }
-
   runApp(const NexusFlutterApp());
 }
 
@@ -61,19 +39,39 @@ class WebViewTestScreen extends StatefulWidget {
 }
 
 class _WebViewTestScreenState extends State<WebViewTestScreen> {
-  // Nur für Windows befüllt — Android/Linux laufen über das WebView-Widget
-  // aus package:webview_flutter direkt im build()-Baum.
+  // Android: neue webview_flutter-4.x-API, ein Controller pro Seite.
+  WebViewController? _androidController;
+  // Windows: eigenständiges Paket mit eigenem Controller-Typ.
   win.WebviewController? _windowsController;
+
   String _status = 'Lädt…';
 
   bool get _isWindows => !kIsWeb && Platform.isWindows;
+  bool get _isLinux => !kIsWeb && Platform.isLinux;
+  bool get _isAndroid => !kIsWeb && Platform.isAndroid;
 
   @override
   void initState() {
     super.initState();
     if (_isWindows) {
       _initWindowsWebview();
+    } else if (_isAndroid) {
+      _initAndroidWebview();
     }
+    // Linux: bewusst keine Initialisierung, siehe _buildBody().
+  }
+
+  void _initAndroidWebview() {
+    final controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageStarted: (url) => setState(() => _status = 'Lädt: $url'),
+          onPageFinished: (_) => setState(() => _status = 'Fertig geladen'),
+        ),
+      )
+      ..loadRequest(Uri.parse(testUrl));
+    setState(() => _androidController = controller);
   }
 
   Future<void> _initWindowsWebview() async {
@@ -116,6 +114,29 @@ class _WebViewTestScreenState extends State<WebViewTestScreen> {
   }
 
   Widget _buildBody() {
+    if (_isLinux) {
+      // Ehrlich sichtbar statt stillschweigend kaputt: flutter_linux_webview
+      // war an die alte webview_flutter-3.0.4-API gekettet und wurde beim
+      // Upgrade auf 4.x (siehe pubspec.yaml) inkompatibel. Eine gepflegte
+      // Linux+CEF-Alternative für die aktuelle API gibt es derzeit nicht —
+      // siehe README, Abschnitt "Linux pausiert".
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'WebView unter Linux ist aktuell pausiert.\n\n'
+            'Grund: das einzige verfügbare Linux-Paket '
+            '(flutter_linux_webview, CEF-basiert) ist an eine veraltete '
+            'webview_flutter-API gekettet, die mit der aktuellen, für '
+            'Android nötigen Version nicht mehr zusammenpasst. '
+            'Scraper/Video-Harvester/Downloader (Werkzeug-Button oben) '
+            'funktionieren hier trotzdem — die hängen an keiner WebView.',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+
     if (_isWindows) {
       final controller = _windowsController;
       if (controller == null) {
@@ -124,12 +145,10 @@ class _WebViewTestScreenState extends State<WebViewTestScreen> {
       return win.Webview(controller);
     }
 
-    // Android + Linux: gemeinsamer Pfad über webview_flutter.
-    return WebView(
-      initialUrl: testUrl,
-      javascriptMode: JavascriptMode.unrestricted,
-      onPageStarted: (url) => setState(() => _status = 'Lädt: $url'),
-      onPageFinished: (url) => setState(() => _status = 'Fertig geladen'),
-    );
+    final controller = _androidController;
+    if (controller == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return WebViewWidget(controller: controller);
   }
 }
