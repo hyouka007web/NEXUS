@@ -1,13 +1,15 @@
 name: nexus_flutter
 description: >
-  NEXUS (Flutter) — Werkzeug-Test-Gerüst mit WebView auf Android, Windows
-  und Linux, plus den nach Dart portierten Engines aus dem Kotlin-Original:
-  Scraper (ScraperEngine), Video Harvester (VideoHarvesterEngine,
-  YtDlpStyleExtractor, MediaLinkFinder) und Downloader (VideoDownloader,
-  DownloadRepository) inklusive einer Test-Oberfläche dafür
-  (ToolsTestScreen). Noch ohne das eigentliche NEXUS-UI (Tabs, Adressleiste,
-  Mediathek-Ansicht) und ohne Ad-Block/Redirect-Shield — die kommen in den
-  nächsten Stufen.
+  NEXUS (Flutter). Android: vollständige Browser-Oberfläche nach dem
+  design.md-Vorbild des Kotlin-Originals — Tabs, Adressleiste, Sidebar
+  (Zurück/Vor/Home/Komplett-Analyse/Video-Harvester/Mediathek), native
+  Startseite, Redirect-/Ad-Shield (Navigations-Ebene, siehe
+  redirect_shield.dart für die API-Grenze gegenüber GeckoView) und
+  Mediathek. Windows/Linux: einfachere Vorstufe (kein Absturz, aber noch
+  ohne Tabs/Sidebar) bis sie ihr eigenes, zur jeweiligen WebView-API
+  passendes Äquivalent bekommen. Scraper/Video-Harvester/Downloader sind
+  reines Dart ohne Plattform-Channel und laufen unverändert auf allen drei
+  Plattformen.
 publish_to: 'none'
 version: 0.1.0+1
 
@@ -47,3 +49,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/nexus_logo.png
