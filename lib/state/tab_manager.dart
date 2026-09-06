@@ -1,4 +1,8 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../adblock/redirect_shield.dart';
@@ -12,6 +16,11 @@ import '../models/tab_model.dart';
 /// `WebViewController` — `webview_flutter`s `WebViewWidget` ist dafür
 /// ausgelegt, mehrere gleichzeitig zu halten, ein Umhängen wie bei
 /// GeckoView ist hier weder nötig noch vorgesehen.
+///
+/// Tabs überleben jetzt einen Neustart (vorher fehlte das komplett): jede
+/// strukturelle Änderung (neuer Tab, geschlossener Tab, Navigation) schreibt
+/// die aktuelle URL-Liste in eine kleine JSON-Datei; [restore] liest sie
+/// beim Start wieder ein — entspricht Kotlins `TabPersistence`.
 class TabManager extends ChangeNotifier {
   final List<NexusTab> tabs = [];
   int activeIndex = 0;
@@ -20,11 +29,36 @@ class TabManager extends ChangeNotifier {
 
   NexusTab? get activeTab => tabs.isEmpty ? null : tabs[activeIndex];
 
-  TabManager() {
-    addTab();
+  static const String _persistFile = 'tabs.json';
+
+  /// Muss einmalig aufgerufen werden, bevor die UI die Tabs anzeigt (siehe
+  /// `BrowserScreen.initState`). Lädt gespeicherte Tabs, oder legt — falls
+  /// keine da sind oder das Lesen fehlschlägt — einen einzelnen Start-Tab an.
+  Future<void> restore() async {
+    try {
+      final file = await _persistFilePath();
+      if (await file.exists()) {
+        final raw = jsonDecode(await file.readAsString()) as List<dynamic>;
+        final urls = raw.whereType<String>().toList();
+        if (urls.isNotEmpty) {
+          for (final url in urls) {
+            addTab(url: url, navigate: url != kHomeSentinel, persist: false);
+          }
+          return;
+        }
+      }
+    } catch (_) {
+      // Kaputte/fehlende Datei — einfach mit einem frischen Tab starten,
+      // statt die App-Öffnung daran scheitern zu lassen.
+    }
+    addTab(persist: false);
   }
 
-  NexusTab addTab({String url = kHomeSentinel, bool navigate = true}) {
+  NexusTab addTab({
+    String url = kHomeSentinel,
+    bool navigate = true,
+    bool persist = true,
+  }) {
     final controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted);
     final tab = NexusTab(controller: controller, url: url);
@@ -41,6 +75,7 @@ class TabManager extends ChangeNotifier {
         onLocationChange: (newUrl) {
           tab.url = newUrl;
           notifyListeners();
+          _persist();
         },
       ),
     );
@@ -48,9 +83,10 @@ class TabManager extends ChangeNotifier {
     tabs.add(tab);
     activeIndex = tabs.length - 1;
     if (navigate && url != kHomeSentinel) {
-      _load(tab, url);
+      _load(tab, url, persist: false);
     }
     notifyListeners();
+    if (persist) _persist();
     return tab;
   }
 
@@ -64,6 +100,7 @@ class TabManager extends ChangeNotifier {
     }
     if (activeIndex >= tabs.length) activeIndex = tabs.length - 1;
     notifyListeners();
+    _persist();
   }
 
   void switchTab(String tabId) {
@@ -109,13 +146,31 @@ class TabManager extends ChangeNotifier {
     tab.url = kHomeSentinel;
     tab.title = 'Neuer Tab';
     notifyListeners();
+    _persist();
   }
 
-  void _load(NexusTab tab, String url) {
+  void _load(NexusTab tab, String url, {bool persist = true}) {
     tab.pendingAppNavigation = true;
     tab.url = url;
     tab.controller.loadRequest(Uri.parse(url));
     notifyListeners();
+    if (persist) _persist();
+  }
+
+  Future<File> _persistFilePath() async {
+    final dir = await getApplicationDocumentsDirectory();
+    return File('${dir.path}/$_persistFile');
+  }
+
+  Future<void> _persist() async {
+    try {
+      final file = await _persistFilePath();
+      final urls = tabs.map((t) => t.url).toList();
+      await file.writeAsString(jsonEncode(urls));
+    } catch (_) {
+      // Tab-Speicherung ist ein Komfort-Feature — ein Schreibfehler hier
+      // soll das Browsen selbst nicht stören.
+    }
   }
 
   static String _resolveInput(String raw) {

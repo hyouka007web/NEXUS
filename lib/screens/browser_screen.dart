@@ -25,6 +25,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
   final _tabManager = TabManager();
   final _urlController = TextEditingController();
   bool _sidebarExpanded = false;
+  bool _restoring = true;
   String? _notification;
   VoidCallback? _notificationAction;
   String? _notificationActionLabel;
@@ -33,7 +34,13 @@ class _BrowserScreenState extends State<BrowserScreen> {
   void initState() {
     super.initState();
     _tabManager.addListener(_onTabManagerChanged);
+    _restoreTabs();
+  }
+
+  Future<void> _restoreTabs() async {
+    await _tabManager.restore();
     _syncUrlField();
+    if (mounted) setState(() => _restoring = false);
   }
 
   @override
@@ -228,16 +235,34 @@ class _BrowserScreenState extends State<BrowserScreen> {
                       itemCount: filtered.length,
                       itemBuilder: (context, i) {
                         final v = filtered[i];
+                        const downloadable = {'MP4', 'WEBM', 'M3U8', 'MEDIA'};
+                        final canDownload = downloadable.contains(v.type);
                         return ListTile(
                           title: Text(v.title.isEmpty ? v.host : v.title,
                               maxLines: 1, overflow: TextOverflow.ellipsis),
-                          subtitle: Text('${v.type} · ${v.status}',
-                              maxLines: 1, overflow: TextOverflow.ellipsis),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.download,
-                                color: NexusColors.accentPrimary),
-                            onPressed: () => _downloadVideo(v, referer),
+                          subtitle: Text(
+                            canDownload
+                                ? '${v.type} · ${v.status}'
+                                : v.type == 'DASH'
+                                    ? 'DASH erkannt — Download noch nicht unterstützt'
+                                    : 'Nur Player-/Einbettungsseite — keine direkte '
+                                        'Videodatei gefunden (z.B. YouTube-Links '
+                                        'lassen sich so generell nicht extrahieren)',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: canDownload
+                                ? null
+                                : const TextStyle(color: NexusColors.textMuted),
                           ),
+                          isThreeLine: !canDownload,
+                          trailing: canDownload
+                              ? IconButton(
+                                  icon: const Icon(Icons.download,
+                                      color: NexusColors.accentPrimary),
+                                  onPressed: () => _downloadVideo(v, referer),
+                                )
+                              : const Icon(Icons.block,
+                                  color: NexusColors.textMuted, size: 20),
                         );
                       },
                     ),
@@ -282,6 +307,12 @@ class _BrowserScreenState extends State<BrowserScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_restoring) {
+      return const Scaffold(
+        backgroundColor: NexusColors.bgBase,
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
     final tab = _tabManager.activeTab;
     return Scaffold(
       backgroundColor: NexusColors.bgBase,
