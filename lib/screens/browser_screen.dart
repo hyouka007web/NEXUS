@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -156,17 +158,53 @@ class _BrowserScreenState extends State<BrowserScreen> {
       _showNotification('Erst eine Seite öffnen');
       return;
     }
-    _showNotification('Durchsuche verlinkte Seiten…',
+    _showNotification('Durchsuche Seite…',
         duration: const Duration(seconds: 30));
     try {
-      final results = await VideoHarvesterEngine.harvest(tab.url);
+      final merged = <String, HarvestedVideo>{};
+
+      // Zuerst das tatsächlich gerenderte DOM der offenen WebView lesen —
+      // NACH JavaScript-Ausführung. Viele Streaming-Seiten bauen ihre
+      // Player-Quelle erst per JS zusammen; ein reiner HTTP-Fetch (siehe
+      // unten) sieht solche URLs nie, weil sie in der rohen Server-Antwort
+      // noch gar nicht existieren. Das war vermutlich der Hauptgrund dafür,
+      // dass zuletzt kaum echte Videodateien gefunden wurden.
+      try {
+        final raw = await tab.controller.runJavaScriptReturningResult(
+          'document.documentElement.outerHTML',
+        );
+        String renderedHtml;
+        try {
+          renderedHtml = jsonDecode(raw.toString()) as String;
+        } catch (_) {
+          renderedHtml = raw.toString();
+        }
+        for (final v in VideoHarvesterEngine.extractFromRenderedHtml(
+          renderedHtml,
+          tab.url,
+          titleHint: tab.title,
+        )) {
+          merged[v.url] = v;
+        }
+      } catch (_) {
+        // JS-Auswertung kann z.B. bei restriktiver Content-Security-Policy
+        // fehlschlagen — dann bleibt wenigstens der Netzwerk-Crawl unten.
+      }
+
+      // Zusätzlich der bisherige Netzwerk-Crawl — findet Treffer auf
+      // verlinkten Seiten (Embeds, weiterführende Player-Seiten), die im
+      // aktuell offenen Tab selbst gar nicht sichtbar sind.
+      for (final v in await VideoHarvesterEngine.harvest(tab.url)) {
+        merged.putIfAbsent(v.url, () => v);
+      }
+
       if (!mounted) return;
-      if (results.isEmpty) {
+      if (merged.isEmpty) {
         _showNotification('Keine Videos gefunden');
         return;
       }
       setState(() => _notification = null);
-      _showHarvesterSheet(results, referer: tab.url);
+      _showHarvesterSheet(merged.values.toList(), referer: tab.url);
     } catch (e) {
       _showNotification('Video Harvester fehlgeschlagen: $e');
     }

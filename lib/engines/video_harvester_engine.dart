@@ -18,6 +18,15 @@ class VideoHarvesterEngine {
     r'''(?:href|src|data-src|data-url|data-video|data-file|content)\s*=\s*['"]([^'"]+)['"]''',
     caseSensitive: false,
   );
+  // Viele Player betten ihre Quelle als JSON-Konfiguration in einem
+  // <script>-Block ein statt als HTML-Attribut, z.B. `"file": "…mp4"` oder
+  // `"hls": "…m3u8"` in einem JWPlayer-/Video.js-Setup-Aufruf. Das obige
+  // Attribut-Muster sieht so etwas nicht, weil es HTML-Attribut-Syntax
+  // erwartet, keine JSON-Syntax.
+  static final RegExp _jsonKeyPattern = RegExp(
+    r'''"(?:file|src|source|url|hls|dash|contentUrl|videoUrl|streamUrl)"\s*:\s*"([^"]+)"''',
+    caseSensitive: false,
+  );
   static final RegExp _urlPattern = RegExp(
     r'''https?://[^\s"'<>\\]+''',
     caseSensitive: false,
@@ -54,38 +63,69 @@ class VideoHarvesterEngine {
           ? _extractTitle(html)
           : item.inheritedTitle;
 
-      for (final candidate in _extractCandidates(html, normalizedPage)) {
-        final normalized = _normalize(candidate);
-        if (normalized == null) continue;
-        final type = _classify(normalized);
-        if (type == 'LINK') continue;
-        String host;
-        try {
-          host = Uri.parse(normalized).host;
-        } catch (_) {
-          host = '';
-        }
-        final status = {'MP4', 'WEBM', 'M3U8', 'MEDIA', 'DASH'}.contains(type)
-            ? 'MEDIA SOURCE'
-            : 'PLAYER / VIDEO PAGE';
-        result.putIfAbsent(
-          normalized,
-          () => HarvestedVideo(
-            title: pageTitle,
-            url: normalized,
-            host: host,
-            type: type,
-            status: status,
-          ),
-        );
+      for (final found in _classifyHtml(html, normalizedPage, pageTitle)) {
+        result.putIfAbsent(found.url, () => found);
         if (deepInspect &&
-            type == 'PLAYER' &&
+            found.type == 'PLAYER' &&
             queue.length + visited.length < _maxLinkedPages) {
-          queue.add(_QueueItem(normalized, pageTitle));
+          queue.add(_QueueItem(found.url, pageTitle));
         }
       }
     }
     return result.values.toList();
+  }
+
+  /// Wertet bereits vorliegendes HTML aus, statt es selbst per HTTP zu
+  /// holen — keine Rekursion in verlinkte Seiten. Der entscheidende
+  /// Anwendungsfall: [html] kann das **nach JavaScript-Ausführung
+  /// gerenderte** DOM einer echten WebView sein (`document.documentElement.
+  /// outerHTML`), nicht nur die rohe Server-Antwort. Viele Streaming-Seiten
+  /// bauen ihren `<video>`/Player-Quelltext erst per JS zusammen, nachdem
+  /// die Seite geladen ist — ein reiner HTTP-Fetch (wie [harvest] ihn für
+  /// verlinkte Seiten macht) sieht diese URLs nie, weil sie in der
+  /// Server-Antwort schlicht noch nicht existieren. Das war bei genauerer
+  /// Betrachtung vermutlich die eigentliche Ursache dafür, dass zuletzt kaum
+  /// echte Videodateien gefunden wurden, nicht nur ein zu schwacher
+  /// Downloader.
+  static List<HarvestedVideo> extractFromRenderedHtml(
+    String html,
+    String baseUrl, {
+    String titleHint = '',
+  }) {
+    final title =
+        _extractTitle(html).isNotEmpty ? _extractTitle(html) : titleHint;
+    return _classifyHtml(html, baseUrl, title);
+  }
+
+  static List<HarvestedVideo> _classifyHtml(
+    String html,
+    String baseUrl,
+    String pageTitle,
+  ) {
+    final out = <HarvestedVideo>[];
+    for (final candidate in _extractCandidates(html, baseUrl)) {
+      final normalized = _normalize(candidate);
+      if (normalized == null) continue;
+      final type = _classify(normalized);
+      if (type == 'LINK') continue;
+      String host;
+      try {
+        host = Uri.parse(normalized).host;
+      } catch (_) {
+        host = '';
+      }
+      final status = {'MP4', 'WEBM', 'M3U8', 'MEDIA', 'DASH'}.contains(type)
+          ? 'MEDIA SOURCE'
+          : 'PLAYER / VIDEO PAGE';
+      out.add(HarvestedVideo(
+        title: pageTitle,
+        url: normalized,
+        host: host,
+        type: type,
+        status: status,
+      ));
+    }
+    return out;
   }
 
   static Future<String?> _fetchHtml(String url) async {
@@ -135,6 +175,9 @@ class VideoHarvesterEngine {
 
     for (final m in _attrPattern.allMatches(html)) {
       add(m.group(1));
+    }
+    for (final m in _jsonKeyPattern.allMatches(html)) {
+      add(m.group(1)?.replaceAll(r'\/', '/'));
     }
     for (final m in _urlPattern.allMatches(html)) {
       add(m.group(0));
