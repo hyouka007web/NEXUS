@@ -34,6 +34,7 @@ class YtDlpStyleExtractor {
       'WEBM' => 95,
       'M3U8' => 90,
       'MEDIA' => 85,
+      'DASH' => 60, // erkannt, aber noch nicht herunterladbar — siehe VideoDownloader
       'PLAYER' => 55,
       _ => 0,
     };

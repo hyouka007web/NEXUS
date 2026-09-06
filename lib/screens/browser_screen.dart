@@ -166,6 +166,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
   }
 
   void _showHarvesterSheet(List<HarvestedVideo> results, {required String referer}) {
+    String query = '';
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -173,40 +174,79 @@ class _BrowserScreenState extends State<BrowserScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(NexusRadii.panel)),
       ),
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        expand: false,
-        builder: (context, scrollController) => Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('${results.length} Treffer',
-                  style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Expanded(
-                child: ListView.builder(
-                  controller: scrollController,
-                  itemCount: results.length,
-                  itemBuilder: (context, i) {
-                    final v = results[i];
-                    return ListTile(
-                      title: Text(v.title.isEmpty ? v.host : v.title,
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
-                      subtitle: Text('${v.type} · ${v.status}',
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.download,
-                            color: NexusColors.accentPrimary),
-                        onPressed: () => _downloadVideo(v, referer),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final filtered = query.trim().isEmpty
+              ? results
+              : results.where((v) {
+                  final q = query.toLowerCase();
+                  return v.title.toLowerCase().contains(q) ||
+                      v.host.toLowerCase().contains(q) ||
+                      v.url.toLowerCase().contains(q);
+                }).toList();
+          return DraggableScrollableSheet(
+            initialChildSize: 0.6,
+            expand: false,
+            builder: (context, scrollController) => Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${results.length} Treffer',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  TextField(
+                    style: const TextStyle(color: NexusColors.textPrimary),
+                    onChanged: (value) =>
+                        setSheetState(() => query = value),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      hintText: 'Filtern, z.B. nach Titel…',
+                      hintStyle:
+                          const TextStyle(color: NexusColors.textMuted),
+                      prefixIcon: const Icon(Icons.search,
+                          size: 20, color: NexusColors.textMuted),
+                      filled: true,
+                      fillColor: NexusColors.bgPill,
+                      border: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(NexusRadii.button),
+                        borderSide: BorderSide.none,
                       ),
-                    );
-                  },
-                ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  if (filtered.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Text('Keine Treffer für diesen Filter.',
+                          style: TextStyle(color: NexusColors.textMuted)),
+                    ),
+                  Expanded(
+                    child: ListView.builder(
+                      controller: scrollController,
+                      itemCount: filtered.length,
+                      itemBuilder: (context, i) {
+                        final v = filtered[i];
+                        return ListTile(
+                          title: Text(v.title.isEmpty ? v.host : v.title,
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                          subtitle: Text('${v.type} · ${v.status}',
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.download,
+                                color: NexusColors.accentPrimary),
+                            onPressed: () => _downloadVideo(v, referer),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -226,8 +266,17 @@ class _BrowserScreenState extends State<BrowserScreen> {
         },
       );
       DownloadRepository.instance.finish(task);
+      _showNotification('Fertig: ${video.title}');
     } catch (e) {
       DownloadRepository.instance.fail(task, '$e');
+      // Vorher wurde ein Fehlschlag nirgends angezeigt — die Mediathek
+      // blendet FAILED-Einträge sogar bewusst aus (siehe dortiger Filter),
+      // und ohne diese Meldung hier sah ein Fehlschlag identisch zu einem
+      // erfolgreichen, nur unsichtbaren Download aus.
+      _showNotification(
+        'Download fehlgeschlagen: $e',
+        duration: const Duration(seconds: 8),
+      );
     }
   }
 

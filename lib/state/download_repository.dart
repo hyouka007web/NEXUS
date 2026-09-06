@@ -49,8 +49,8 @@ class DownloadRepository extends ChangeNotifier {
     final updated = task.copyWith(percent: 100, state: DownloadState.done);
     _replace(task, updated);
     // Bleibt kurz sichtbar als "fertig" statt sofort zu verschwinden — die
-    // Mediathek-UI entfernt DONE-Aufgaben selbst, sobald "Meine Downloads"
-    // neu geladen wird (siehe clearFinished()).
+    // Mediathek-UI entfernt DONE-Aufgaben selbst, sobald sie neu geladen
+    // wird (siehe clearDone()).
     return updated;
   }
 
@@ -61,10 +61,18 @@ class DownloadRepository extends ChangeNotifier {
     return updated;
   }
 
-  void clearFinished() {
-    _tasks.removeWhere(
-      (t) => t.state == DownloadState.done || t.state == DownloadState.failed,
-    );
+  /// Nur abgeschlossene (nicht fehlgeschlagene) Aufgaben räumen — die
+  /// stehen ab jetzt im persistenten Index (siehe VideoDownloader.loadIndex).
+  /// Fehlgeschlagene bleiben sichtbar, bis [dismiss] sie explizit entfernt;
+  /// vorher wurden beide zusammen geräumt, wodurch ein Fehlschlag genauso
+  /// spurlos verschwand wie ein Erfolg.
+  void clearDone() {
+    _tasks.removeWhere((t) => t.state == DownloadState.done);
+    notifyListeners();
+  }
+
+  void dismiss(DownloadTask task) {
+    _tasks.removeWhere((t) => t.id == task.id);
     notifyListeners();
   }
 

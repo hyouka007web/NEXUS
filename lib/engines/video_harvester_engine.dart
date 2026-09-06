@@ -65,7 +65,7 @@ class VideoHarvesterEngine {
         } catch (_) {
           host = '';
         }
-        final status = {'MP4', 'WEBM', 'M3U8', 'MEDIA'}.contains(type)
+        final status = {'MP4', 'WEBM', 'M3U8', 'MEDIA', 'DASH'}.contains(type)
             ? 'MEDIA SOURCE'
             : 'PLAYER / VIDEO PAGE';
         result.putIfAbsent(
@@ -165,11 +165,16 @@ class VideoHarvesterEngine {
     } catch (_) {
       path = '';
     }
+    const directExtensions = {
+      '.mp4', '.m4v', '.mov', '.webm', '.mkv', '.flv', '.3gp', '.ogv', //
+    };
     if (path.endsWith('.mp4') || path.endsWith('.m4v') || path.endsWith('.mov')) {
       return 'MP4';
     }
     if (path.endsWith('.webm')) return 'WEBM';
+    if (directExtensions.any(path.endsWith)) return 'MEDIA';
     if (path.endsWith('.m3u8')) return 'M3U8';
+    if (path.endsWith('.mpd')) return 'DASH';
     if (path.endsWith('.ts')) return 'MEDIA';
     if (_isLikelyVideoPage(url)) return 'PLAYER';
     return 'LINK';

@@ -69,6 +69,17 @@ class VideoDownloader {
     if (!mediaUrl.startsWith('http://') && !mediaUrl.startsWith('https://')) {
       throw ArgumentError('mediaUrl muss http(s) sein: $mediaUrl');
     }
+    if (_looksLikeDash(mediaUrl)) {
+      // DASH-Manifeste (.mpd) sind XML-Playlists, keine Videodatei selbst —
+      // ein Klartext-Download würde bisher "erfolgreich" die XML-Datei
+      // unter einem Video-Dateinamen speichern, statt eine Fehlermeldung zu
+      // zeigen. Echtes DASH-Downloading (Segmente pro Adaptation-Set
+      // zusammensetzen, wie beim HLS-Pfad unten) ist noch nicht gebaut.
+      throw StateError(
+        'DASH-Streams (.mpd) werden noch nicht unterstützt — nur HLS '
+        '(.m3u8) und direkte Dateien (mp4/webm/...).',
+      );
+    }
     return _looksLikeHls(mediaUrl)
         ? _downloadHls(mediaUrl, pageTitle, referer, onProgress)
         : _downloadDirect(mediaUrl, pageTitle, referer, onProgress);
@@ -120,6 +131,23 @@ class VideoDownloader {
         existing = 0;
         if (await part.exists()) await part.delete();
       }
+
+      final contentType =
+          response.headers.value(HttpHeaders.contentTypeHeader) ?? '';
+      if (contentType.contains('text/html') ||
+          contentType.contains('application/json')) {
+        await response.drain<void>();
+        // Klassischer stiller Fehler: Hotlink-Schutz oder eine nötige
+        // Anmeldung liefert mit Statuscode 200 eine HTML-/JSON-Fehlerseite
+        // statt der Videodatei. Ohne diese Prüfung wurde das bisher als
+        // "erfolgreicher" Download einer kaputten Datei gespeichert.
+        throw StateError(
+          'Server hat keine Videodatei geliefert (Content-Type: '
+          '$contentType) — vermutlich Hotlink-Schutz, Login oder '
+          'Geoblock auf dieser Quelle.',
+        );
+      }
+
       final contentLength = response.contentLength;
       final total = contentLength >= 0 ? contentLength + existing : -1;
       final append = supportsResume && existing > 0;
@@ -166,6 +194,16 @@ class VideoDownloader {
     request.headers.set(HttpHeaders.acceptHeader, '*/*');
     if (referer != null && referer.isNotEmpty) {
       request.headers.set(HttpHeaders.refererHeader, referer);
+      try {
+        final origin = Uri.parse(referer);
+        request.headers.set(
+          'Origin',
+          '${origin.scheme}://${origin.host}'
+              '${origin.hasPort ? ':${origin.port}' : ''}',
+        );
+      } catch (_) {
+        // referer war keine gültige URL — Origin dann einfach weglassen.
+      }
     }
     if (rangeFrom != null && rangeFrom > 0) {
       request.headers.set(HttpHeaders.rangeHeader, 'bytes=$rangeFrom-');
@@ -307,6 +345,14 @@ class VideoDownloader {
   static bool _looksLikeHls(String url) {
     try {
       return Uri.parse(url).path.toLowerCase().endsWith('.m3u8');
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static bool _looksLikeDash(String url) {
+    try {
+      return Uri.parse(url).path.toLowerCase().endsWith('.mpd');
     } catch (_) {
       return false;
     }

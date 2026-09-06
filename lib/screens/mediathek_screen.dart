@@ -30,9 +30,9 @@ class _MediathekScreenState extends State<MediathekScreen> {
       _entries = entries;
       _loading = false;
     });
-    // Fertige/gescheiterte Downloads aus dem Live-Register räumen, sobald
-    // die Mediathek neu geladen wird — sie stehen jetzt im Index.
-    DownloadRepository.instance.clearFinished();
+    // Nur fertige Downloads aus dem Live-Register räumen — die stehen jetzt
+    // im Index. Fehlgeschlagene bleiben sichtbar, siehe DownloadRepository.
+    DownloadRepository.instance.clearDone();
   }
 
   Future<void> _delete(VideoEntry entry) async {
@@ -63,29 +63,62 @@ class _MediathekScreenState extends State<MediathekScreen> {
             ListenableBuilder(
               listenable: DownloadRepository.instance,
               builder: (context, _) {
-                final active = DownloadRepository.instance
-                    .activeAndRecent()
+                final all = DownloadRepository.instance.activeAndRecent();
+                final active = all
                     .where((t) => t.state == DownloadState.downloading)
                     .toList();
-                if (active.isEmpty) return const SizedBox.shrink();
+                final failed =
+                    all.where((t) => t.state == DownloadState.failed).toList();
+                if (active.isEmpty && failed.isEmpty) {
+                  return const SizedBox.shrink();
+                }
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8),
-                      child: Text('Läuft gerade',
-                          style: TextStyle(color: NexusColors.textMuted)),
-                    ),
-                    ...active.map((t) => Card(
-                          child: ListTile(
-                            title: Text(t.title,
-                                maxLines: 1, overflow: TextOverflow.ellipsis),
-                            subtitle: LinearProgressIndicator(
-                              value: t.percent > 0 ? t.percent / 100 : null,
+                    if (active.isNotEmpty) ...[
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: Text('Läuft gerade',
+                            style: TextStyle(color: NexusColors.textMuted)),
+                      ),
+                      ...active.map((t) => Card(
+                            child: ListTile(
+                              title: Text(t.title,
+                                  maxLines: 1, overflow: TextOverflow.ellipsis),
+                              subtitle: LinearProgressIndicator(
+                                value: t.percent > 0 ? t.percent / 100 : null,
+                              ),
+                              trailing: Text('${t.percent}%'),
                             ),
-                            trailing: Text('${t.percent}%'),
-                          ),
-                        )),
+                          )),
+                    ],
+                    if (failed.isNotEmpty) ...[
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: Text('Fehlgeschlagen',
+                            style:
+                                TextStyle(color: NexusColors.accentDanger)),
+                      ),
+                      ...failed.map((t) => Card(
+                            child: ListTile(
+                              leading: const Icon(Icons.error_outline,
+                                  color: NexusColors.accentDanger),
+                              title: Text(t.title,
+                                  maxLines: 1, overflow: TextOverflow.ellipsis),
+                              subtitle: Text(
+                                t.errorMessage ?? 'Unbekannter Fehler',
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              isThreeLine: true,
+                              trailing: IconButton(
+                                icon: const Icon(Icons.close),
+                                onPressed: () => DownloadRepository.instance
+                                    .dismiss(t),
+                              ),
+                            ),
+                          )),
+                    ],
                     const Divider(height: 24),
                   ],
                 );
