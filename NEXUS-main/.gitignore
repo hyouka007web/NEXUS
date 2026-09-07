@@ -1,0 +1,25 @@
+# Flutter/Dart
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+pubspec.lock
+
+# Android, Windows und Linux werden bewusst NICHT eingecheckt. Der
+# CI-Workflow legt sie über "flutter create --platforms=... ." frisch an,
+# passend zur jeweils installierten Flutter-Version — statt dass wir
+# Gradle-Wrapper-Binärdateien und CMake/Win32-Boilerplate von Hand pflegen
+# und riskieren, dass sie mit einer neueren Flutter-Version nicht mehr
+# zusammenpassen. pubspec.yaml und lib/ bleiben davon unberührt, "flutter
+# create ." überschreibt nur fehlende Plattformordner, keine bestehenden
+# Dateien.
+android/
+windows/
+linux/
+
+# IDE
+.idea/
+*.iml
