@@ -1,3 +1,4 @@
+import "package:flutter/services.dart";
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show compute;
@@ -123,7 +124,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
     final tab = _tabManager.activeTab;
     if (tab == null) return;
     tab.pendingAppNavigation = true;
-    tab.controller.loadRequest(Uri.parse(event.url));
+    _tabManager.activeTab?.controller.loadRequest(Uri.parse(event.url));
   }
 
   void _showNotification(
@@ -213,10 +214,10 @@ class _BrowserScreenState extends State<BrowserScreen> {
       // einzige Ebene, die auch Player findet, die ihre Stream-URL NIE ins
       // DOM schreiben, sondern nur intern an MediaSource/<video> weiterreichen.
       try {
-        await tab.controller.runJavaScript(NetworkSniffer.injectionScript);
-        await tab.controller.runJavaScript(NetworkSniffer.discoveryScript);
+        await _tabManager.activeTab?.controller.runJavaScript(NetworkSniffer.injectionScript);
+        await _tabManager.activeTab?.controller.runJavaScript(NetworkSniffer.discoveryScript);
         await Future<void>.delayed(const Duration(seconds: 8));
-        final raw = await tab.controller.runJavaScriptReturningResult(
+        final raw = await _tabManager.activeTab?.controller.runJavaScriptReturningResult(
           'JSON.stringify(window.__nexusMedia || [])',
         );
         for (final v in VideoHarvesterEngine.classifyCaptures(
@@ -234,7 +235,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
       // NACH JavaScript-Ausführung. Findet Player, deren Quelle zwar per JS
       // gesetzt wird, aber am Ende doch als Attribut/JSON im DOM landet.
       try {
-        final raw = await tab.controller.runJavaScriptReturningResult(
+        final raw = await _tabManager.activeTab?.controller.runJavaScriptReturningResult(
           'document.documentElement.outerHTML',
         );
         String renderedHtml;
@@ -365,7 +366,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
                               IconButton(
                                 tooltip: 'Stream öffnen',
                                 icon: const Icon(Icons.play_arrow, color: NexusColors.accentPrimary),
-                                onPressed: () => tab.controller.loadRequest(Uri.parse(v.url)),
+                                onPressed: () => _tabManager.activeTab?.controller.loadRequest(Uri.parse(v.url)),
                               ),
                               if (canDownload)
                                 IconButton(
@@ -878,7 +879,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
       );
     }
     return RepaintBoundary(
-      child: WebViewWidget(controller: tab.controller),
+      child: WebViewWidget(controller: _tabManager.activeTab?.controller),
     );
   }
 
