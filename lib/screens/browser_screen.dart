@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import '../engines/network_sniffer.dart';
 import '../engines/scraper_engine.dart';
 import '../engines/video_downloader.dart';
 import '../engines/video_harvester_engine.dart';
@@ -158,17 +159,36 @@ class _BrowserScreenState extends State<BrowserScreen> {
       _showNotification('Erst eine Seite öffnen');
       return;
     }
-    _showNotification('Durchsuche Seite…',
-        duration: const Duration(seconds: 30));
+    _showNotification(
+      'Durchsuche Seite… (Tipp: Video vorher kurz anspielen, findet mehr)',
+      duration: const Duration(seconds: 30),
+    );
     try {
       final merged = <String, HarvestedVideo>{};
 
-      // Zuerst das tatsächlich gerenderte DOM der offenen WebView lesen —
-      // NACH JavaScript-Ausführung. Viele Streaming-Seiten bauen ihre
-      // Player-Quelle erst per JS zusammen; ein reiner HTTP-Fetch (siehe
-      // unten) sieht solche URLs nie, weil sie in der rohen Server-Antwort
-      // noch gar nicht existieren. Das war vermutlich der Hauptgrund dafür,
-      // dass zuletzt kaum echte Videodateien gefunden wurden.
+      // Ebene 1: Netzwerk-Sniffer — liest zurück, welche URLs die Seite
+      // selbst per fetch()/XHR angefragt hat (Skript läuft seit
+      // onPageStarted mit, siehe redirect_shield.dart). Das ist die
+      // einzige Ebene, die auch Player findet, die ihre Stream-URL NIE ins
+      // DOM schreiben, sondern nur intern an MediaSource/<video> weiterreichen.
+      try {
+        final raw = await tab.controller.runJavaScriptReturningResult(
+          'JSON.stringify(window.__nexusSniffed || [])',
+        );
+        for (final v in VideoHarvesterEngine.classifyUrls(
+          NetworkSniffer.parseResult(raw),
+          tab.title,
+        )) {
+          merged[v.url] = v;
+        }
+      } catch (_) {
+        // Sniffer nicht verfügbar (z.B. CSP blockt eval) — weiter mit den
+        // übrigen Ebenen.
+      }
+
+      // Ebene 2: das tatsächlich gerenderte DOM der offenen WebView —
+      // NACH JavaScript-Ausführung. Findet Player, deren Quelle zwar per JS
+      // gesetzt wird, aber am Ende doch als Attribut/JSON im DOM landet.
       try {
         final raw = await tab.controller.runJavaScriptReturningResult(
           'document.documentElement.outerHTML',
@@ -184,14 +204,14 @@ class _BrowserScreenState extends State<BrowserScreen> {
           tab.url,
           titleHint: tab.title,
         )) {
-          merged[v.url] = v;
+          merged.putIfAbsent(v.url, () => v);
         }
       } catch (_) {
         // JS-Auswertung kann z.B. bei restriktiver Content-Security-Policy
-        // fehlschlagen — dann bleibt wenigstens der Netzwerk-Crawl unten.
+        // fehlschlagen — dann bleiben wenigstens die anderen Ebenen.
       }
 
-      // Zusätzlich der bisherige Netzwerk-Crawl — findet Treffer auf
+      // Ebene 3: der bisherige Netzwerk-Crawl — findet Treffer auf
       // verlinkten Seiten (Embeds, weiterführende Player-Seiten), die im
       // aktuell offenen Tab selbst gar nicht sichtbar sind.
       for (final v in await VideoHarvesterEngine.harvest(tab.url)) {

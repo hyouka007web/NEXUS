@@ -97,6 +97,33 @@ class VideoHarvesterEngine {
     return _classifyHtml(html, baseUrl, title);
   }
 
+  static List<HarvestedVideo> classifyUrls(
+    List<String> urls,
+    String pageTitle,
+  ) {
+    final out = <HarvestedVideo>[];
+    for (final raw in urls) {
+      final normalized = _normalize(raw);
+      if (normalized == null) continue;
+      final type = _classify(normalized);
+      if (type == 'LINK' || type == 'PLAYER') continue;
+      String host;
+      try {
+        host = Uri.parse(normalized).host;
+      } catch (_) {
+        host = '';
+      }
+      out.add(HarvestedVideo(
+        title: pageTitle,
+        url: normalized,
+        host: host,
+        type: type,
+        status: 'MEDIA SOURCE (Netzwerk-Sniffer)',
+      ));
+    }
+    return out;
+  }
+
   static List<HarvestedVideo> _classifyHtml(
     String html,
     String baseUrl,

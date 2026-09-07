@@ -1,5 +1,6 @@
 import 'package:webview_flutter/webview_flutter.dart';
 
+import '../engines/network_sniffer.dart';
 import '../models/block_event.dart';
 import '../models/tab_model.dart';
 import 'blocklist.dart';
@@ -50,6 +51,7 @@ class RedirectShield {
         currentHost = Uri.tryParse(url)?.host.toLowerCase();
         onLoadingChange(true);
         onLocationChange(url);
+        tab.controller.runJavaScript(NetworkSniffer.injectionScript);
       },
       onPageFinished: (url) {
         tab.isLoading = false;
