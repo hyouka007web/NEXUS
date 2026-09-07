@@ -1,7 +1,7 @@
-import 'dart:async';
-import 'dart:io';
-import 'dart:convert';
-import 'package:nexus_flutter/models/video_entry.dart';
+import "dart:async";
+import "dart:io";
+import "dart:convert";
+import "package:nexus_flutter/models/video_entry.dart";
 
 class DownloadProgress {
   final int bytes;
@@ -19,7 +19,7 @@ class VideoDownloader {
   static const Duration _connectTimeout = Duration(seconds: 15);
   static const Duration _readTimeout = Duration(seconds: 30);
   static const String _userAgent =
-      'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36';
+      "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36";
 
   static Future<File> download(
     String url,
@@ -33,19 +33,19 @@ class VideoDownloader {
     client.connectionTimeout = _connectTimeout;
     try {
       final req = await client.getUrl(Uri.parse(url));
-      req.headers.set(HttpHeaders.userAgentHeader, headers['User-Agent'] ?? _userAgent);
+      req.headers.set(HttpHeaders.userAgentHeader, headers["User-Agent"] ?? _userAgent);
       if (referer != null && referer.isNotEmpty) {
         req.headers.set(HttpHeaders.refererHeader, referer);
       }
       headers.forEach((k, v) {
-        if (k.toLowerCase() != 'user-agent' && k.toLowerCase() != 'referer') {
+        if (k.toLowerCase() != "user-agent" && k.toLowerCase() != "referer") {
           req.headers.set(k, v);
         }
       });
 
       final res = await req.close().timeout(_connectTimeout);
       if (res.statusCode < 200 || res.statusCode >= 300) {
-        throw HttpException('HTTP Status ${res.statusCode}');
+        throw HttpException("HTTP Status ${res.statusCode}");
       }
 
       final file = File(savePath);
@@ -66,7 +66,7 @@ class VideoDownloader {
 
       await _addToIndex(VideoEntry(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
-        title: title ?? 'Video Download',
+        title: title ?? "Video Download",
         filePath: savePath,
         sourceUrl: url,
         downloadedAt: DateTime.now().toIso8601String(),
@@ -84,12 +84,12 @@ class VideoDownloader {
     client.connectionTimeout = _connectTimeout;
     try {
       final req = await client.getUrl(Uri.parse(url));
-      req.headers.set(HttpHeaders.userAgentHeader, headers['User-Agent'] ?? _userAgent);
+      req.headers.set(HttpHeaders.userAgentHeader, headers["User-Agent"] ?? _userAgent);
       if (referer != null && referer.isNotEmpty) {
         req.headers.set(HttpHeaders.refererHeader, referer);
       }
       headers.forEach((k, v) {
-        if (k.toLowerCase() != 'user-agent' && k.toLowerCase() != 'referer') {
+        if (k.toLowerCase() != "user-agent" && k.toLowerCase() != "referer") {
           req.headers.set(k, v);
         }
       });
@@ -104,28 +104,27 @@ class VideoDownloader {
 
   static Future<String?> parseMasterPlaylist(String mediaUrl, String? referer, [Map<String, String> headers = const {}]) async {
     final master = await _fetchText(mediaUrl, referer, headers);
-    if (!master.contains('#EXTM3U')) return null;
-    if (!master.contains('#EXT-X-STREAM-INF')) return mediaUrl;
+    if (!master.contains("#EXTM3U")) return null;
+    if (!master.contains("#EXT-X-STREAM-INF")) return mediaUrl;
 
-    final lines = master.split('
-');
+    final lines = master.split("\n");
     String? bestUrl;
     int maxBw = -1;
 
     for (int i = 0; i < lines.length; i++) {
       final line = lines[i].trim();
-      if (line.startsWith('#EXT-X-STREAM-INF:')) {
+      if (line.startsWith("#EXT-X-STREAM-INF:")) {
         int bw = 0;
-        final bwMatch = RegExp(r'BANDWIDTH=(\d+)').firstMatch(line);
+        final bwMatch = RegExp(r"BANDWIDTH=(\d+)").firstMatch(line);
         if (bwMatch != null) {
-          bw = int.tryParse(bwMatch.group(1) ?? '0') ?? 0;
+          bw = int.tryParse(bwMatch.group(1) ?? "0") ?? 0;
         }
         if (i + 1 < lines.length) {
           final nextLine = lines[i + 1].trim();
-          if (nextLine.isNotEmpty && !nextLine.startsWith('#')) {
+          if (nextLine.isNotEmpty && !nextLine.startsWith("#")) {
             if (bw > maxBw) {
               maxBw = bw;
-              bestUrl = nextLine.startsWith('http')
+              bestUrl = nextLine.startsWith("http")
                   ? nextLine
                   : Uri.parse(mediaUrl).resolve(nextLine).toString();
             }
@@ -138,7 +137,7 @@ class VideoDownloader {
 
   static Future<List<VideoEntry>> loadIndex() async {
     try {
-      final file = File('/data/data/com.nexus.browser/files/downloads_index.json');
+      final file = File("/data/data/com.nexus.browser/files/downloads_index.json");
       if (!await file.exists()) return [];
       final content = await file.readAsString();
       final List list = jsonDecode(content);
@@ -152,7 +151,7 @@ class VideoDownloader {
     try {
       final items = await loadIndex();
       items.add(entry);
-      final file = File('/data/data/com.nexus.browser/files/downloads_index.json');
+      final file = File("/data/data/com.nexus.browser/files/downloads_index.json");
       await file.parent.create(recursive: true);
       await file.writeAsString(jsonEncode(items.map((e) => e.toJson()).toList()));
     } catch (_) {}
@@ -164,7 +163,7 @@ class VideoDownloader {
       if (await file.exists()) await file.delete();
       final items = await loadIndex();
       items.removeWhere((e) => e.id == entry.id);
-      final indexFile = File('/data/data/com.nexus.browser/files/downloads_index.json');
+      final indexFile = File("/data/data/com.nexus.browser/files/downloads_index.json");
       await indexFile.writeAsString(jsonEncode(items.map((e) => e.toJson()).toList()));
     } catch (_) {}
   }
