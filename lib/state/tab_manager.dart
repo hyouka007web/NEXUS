@@ -8,6 +8,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import '../adblock/redirect_shield.dart';
 import '../models/block_event.dart';
 import '../models/tab_model.dart';
+import 'dev_settings.dart';
 
 /// Verwaltet alle offenen Tabs, ihre WebViewController und den
 /// Redirect-Shield-Zähler — Pendant zu Kotlins `TabManager`. Anders als
@@ -61,6 +62,10 @@ class TabManager extends ChangeNotifier {
   }) {
     final controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted);
+    final uaOverride = DevSettings.instance.userAgentOverride;
+    if (uaOverride != null && uaOverride.isNotEmpty) {
+      controller.setUserAgent(uaOverride);
+    }
     final tab = NexusTab(controller: controller, url: url);
 
     controller.setNavigationDelegate(

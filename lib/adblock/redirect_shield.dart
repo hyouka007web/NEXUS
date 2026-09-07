@@ -3,6 +3,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import '../engines/network_sniffer.dart';
 import '../models/block_event.dart';
 import '../models/tab_model.dart';
+import '../state/dev_settings.dart';
 import 'blocklist.dart';
 
 /// Navigations-Ebene-Schutz für einen Tab: blockt (a) Navigationen zu
@@ -62,6 +63,11 @@ class RedirectShield {
             onLocationChange(tab.url);
           }
         });
+        final host = Uri.tryParse(url)?.host.toLowerCase();
+        final script = host == null ? null : DevSettings.instance.domainScripts[host];
+        if (script != null && script.trim().isNotEmpty) {
+          tab.controller.runJavaScript(script);
+        }
       },
       onNavigationRequest: (request) {
         final wasAppNavigation = tab.pendingAppNavigation;

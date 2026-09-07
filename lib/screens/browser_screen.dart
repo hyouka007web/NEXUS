@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -8,14 +9,31 @@ import '../engines/scraper_engine.dart';
 import '../engines/video_downloader.dart';
 import '../engines/video_harvester_engine.dart';
 import '../models/block_event.dart';
+import '../models/download_task.dart';
 import '../models/harvested_video.dart';
+import '../models/quick_link.dart';
 import '../models/scrape_result.dart';
 import '../models/tab_model.dart';
+import '../state/dev_settings.dart';
 import '../state/download_repository.dart';
 import '../state/tab_manager.dart';
 import '../theme/nexus_theme.dart';
+import 'devtools_screen.dart';
+import 'downloads_panel.dart';
 import 'mediathek_screen.dart';
 import 'start_page.dart';
+
+/// `compute()` verlangt eine Top-Level- oder statische Funktion (kein
+/// Closure, keine Instanzmethode) — sie wird in einen eigenen Isolate
+/// verschickt und muss daher eigenständig aufrufbar sein. Damit läuft die
+/// regex-lastige Auswertung von potenziell großem HTML (Scraper,
+/// Netzwerk-Crawl des Harvesters) nicht mehr auf dem UI-Isolate und kann
+/// die Bildwiederholung nicht mehr blockieren — siehe Performance-Hinweis
+/// weiter unten in dieser Datei.
+Future<ScrapeResult> _scrapeIsolate(String url) => ScraperEngine.scrape(url);
+
+Future<List<HarvestedVideo>> _harvestIsolate(String url) =>
+    VideoHarvesterEngine.harvest(url);
 
 class BrowserScreen extends StatefulWidget {
   const BrowserScreen({super.key});
@@ -41,7 +59,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
   }
 
   Future<void> _restoreTabs() async {
-    await _tabManager.restore();
+    await Future.wait([_tabManager.restore(), DevSettings.instance.restore()]);
     _syncUrlField();
     if (mounted) setState(() => _restoring = false);
   }
@@ -111,7 +129,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
     }
     _showNotification('Analysiere…', duration: const Duration(seconds: 30));
     try {
-      final ScrapeResult result = await ScraperEngine.scrape(tab.url);
+      final ScrapeResult result = await compute(_scrapeIsolate, tab.url);
       _showNotification(
         '${result.links.length} Links · ${result.media.length} Medien gefunden',
         actionLabel: 'DETAILS',
@@ -214,7 +232,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
       // Ebene 3: der bisherige Netzwerk-Crawl — findet Treffer auf
       // verlinkten Seiten (Embeds, weiterführende Player-Seiten), die im
       // aktuell offenen Tab selbst gar nicht sichtbar sind.
-      for (final v in await VideoHarvesterEngine.harvest(tab.url)) {
+      for (final v in await compute(_harvestIsolate, tab.url)) {
         merged.putIfAbsent(v.url, () => v);
       }
 
@@ -433,21 +451,124 @@ class _BrowserScreenState extends State<BrowserScreen> {
               ],
             ),
           ),
-          PopupMenuButton<String>(
+          IconButton(
             icon: const Icon(Icons.more_vert, color: NexusColors.textPrimary),
-            color: NexusColors.bgSurfaceRaised,
-            onSelected: (value) {
-              if (value == 'mediathek') {
+            tooltip: 'Menü',
+            onPressed: _openCommandCenter,
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openCommandCenter() {
+    final tab = _tabManager.activeTab;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: NexusColors.bgSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(NexusRadii.panel)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(top: 12, bottom: 4),
+              child: Text('NEXUS',
+                  style: TextStyle(
+                      color: NexusColors.accentPrimary,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 2)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.download_outlined,
+                  color: NexusColors.textPrimary),
+              title: const Text('Downloads'),
+              subtitle: ListenableBuilder(
+                listenable: DownloadRepository.instance,
+                builder: (context, _) {
+                  final active = DownloadRepository.instance
+                      .activeAndRecent()
+                      .where((t) => t.state == DownloadState.downloading)
+                      .length;
+                  return Text(active > 0
+                      ? '$active läuft gerade'
+                      : 'Nichts läuft gerade');
+                },
+              ),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _openDownloadsPanel();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.video_library_outlined,
+                  color: NexusColors.textPrimary),
+              title: const Text('Mediathek'),
+              onTap: () {
+                Navigator.pop(sheetContext);
                 Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const MediathekScreen()),
                 );
-              }
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'mediathek', child: Text('Mediathek')),
-            ],
-          ),
-        ],
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.terminal, color: NexusColors.textPrimary),
+              title: const Text('DevTools'),
+              subtitle: tab == null
+                  ? const Text('Erst eine Seite öffnen')
+                  : null,
+              enabled: tab != null,
+              onTap: tab == null
+                  ? null
+                  : () {
+                      Navigator.pop(sheetContext);
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => DevToolsScreen(tab: tab),
+                        ),
+                      );
+                    },
+            ),
+            ListTile(
+              leading: const Icon(Icons.push_pin_outlined,
+                  color: NexusColors.textPrimary),
+              title: const Text('Aktuelle Seite als Quick-Link speichern'),
+              enabled: tab != null && !tab.isHome,
+              onTap: tab == null || tab.isHome
+                  ? null
+                  : () {
+                      Navigator.pop(sheetContext);
+                      DevSettings.instance.addQuickLink(
+                        QuickLink(label: tab.title, url: tab.url),
+                      );
+                      _showNotification('Zur Startseite hinzugefügt');
+                    },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openDownloadsPanel() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: NexusColors.bgSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(NexusRadii.panel)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        expand: false,
+        builder: (context, scrollController) => SingleChildScrollView(
+          controller: scrollController,
+          padding: const EdgeInsets.all(12),
+          child: const DownloadsSection(),
+        ),
       ),
     );
   }
@@ -604,9 +725,15 @@ class _BrowserScreenState extends State<BrowserScreen> {
   Widget _buildContent(NexusTab? tab) {
     if (tab == null) return const SizedBox.shrink();
     if (tab.isHome) {
-      return StartPage(onSubmit: (query) => _tabManager.navigateInput(query));
+      return StartPage(
+        onSubmit: (query) => _tabManager.navigateInput(query),
+        tabCount: _tabManager.tabs.length,
+        blockedCount: _tabManager.blockedCount,
+      );
     }
-    return WebViewWidget(controller: tab.controller);
+    return RepaintBoundary(
+      child: WebViewWidget(controller: tab.controller),
+    );
   }
 
   Widget _buildBottomNotification() {
