@@ -3,6 +3,18 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:nexus_flutter/models/video_entry.dart';
 
+class DownloadProgress {
+  final int bytes;
+  final int total;
+  final int percent;
+
+  DownloadProgress({
+    required this.bytes,
+    required this.total,
+    required this.percent,
+  });
+}
+
 class VideoDownloader {
   static const Duration _connectTimeout = Duration(seconds: 15);
   static const Duration _readTimeout = Duration(seconds: 30);
@@ -15,7 +27,7 @@ class VideoDownloader {
     String? title,
     String? referer,
     Map<String, String> headers = const {},
-    void Function(int count, int total)? onProgress,
+    void Function(DownloadProgress progress)? onProgress,
   }) async {
     final client = HttpClient();
     client.connectionTimeout = _connectTimeout;
@@ -45,7 +57,8 @@ class VideoDownloader {
         sink.add(chunk);
         downloaded += chunk.length;
         if (onProgress != null) {
-          onProgress(downloaded, total);
+          final pct = total > 0 ? ((downloaded / total) * 100).round() : 0;
+          onProgress(DownloadProgress(bytes: downloaded, total: total, percent: pct));
         }
       }
       await sink.flush();
@@ -55,8 +68,9 @@ class VideoDownloader {
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         title: title ?? 'Video Download',
         filePath: savePath,
-        totalBytes: downloaded,
-        date: DateTime.now(),
+        sourceUrl: url,
+        downloadedAt: DateTime.now().toIso8601String(),
+        sizeBytes: downloaded,
       ));
 
       return file;
@@ -93,7 +107,7 @@ class VideoDownloader {
     if (!master.contains('#EXTM3U')) return null;
     if (!master.contains('#EXT-X-STREAM-INF')) return mediaUrl;
 
-    final lines = master.split('\\n');
+    final lines = master.split('\n');
     String? bestUrl;
     int maxBw = -1;
 
@@ -101,7 +115,7 @@ class VideoDownloader {
       final line = lines[i].trim();
       if (line.startsWith('#EXT-X-STREAM-INF:')) {
         int bw = 0;
-        final bwMatch = RegExp(r'BANDWIDTH=(\\d+)').firstMatch(line);
+        final bwMatch = RegExp(r'BANDWIDTH=(\d+)').firstMatch(line);
         if (bwMatch != null) {
           bw = int.tryParse(bwMatch.group(1) ?? '0') ?? 0;
         }
@@ -159,4 +173,4 @@ class VideoDownloader {
 with open('lib/engines/video_downloader.dart', 'w') as f:
     f.write(code)
 
-print("video_downloader.dart mit VideoEntry & gemischten Parametern gefixt.")
+print("video_downloader.dart komplett angepasst.")
