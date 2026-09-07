@@ -715,7 +715,58 @@ class _BrowserScreenState extends State<BrowserScreen> {
     }
   }
 
-  Widget _buildPaneTabStrip(PaneState pane){return SizedBox(height:38,child:Row(children:[Expanded(child:ListView(scrollDirection:Axis.horizontal,padding:const EdgeInsets.symmetric(horizontal:6,vertical:4),children:pane.tabIds.map((id){NexusTab? t; for (final candidate in _tabManager.tabs) { if (candidate.id == id) { t = candidate; break; } }if(t==null)return const SizedBox.shrink();final a=id==pane.activeTabId;return GestureDetector(onTap:(){pane.activeTabId=id;_tabManager.switchTab(id);_activatePane(pane);},child:Container(margin:const EdgeInsets.only(right:6),padding:const EdgeInsets.symmetric(horizontal:10),decoration:BoxDecoration(color:a?NexusColors.accentPrimarySoft:NexusColors.bgSurface,borderRadius:BorderRadius.circular(12),border:Border.all(color:a?NexusColors.accentPrimary:NexusColors.border)),alignment:Alignment.center,child:Row(children:[Text(t.isHome?'Neuer Tab':t.title,maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(fontSize:11)),const SizedBox(width:5),GestureDetector(onTap:(){_tabManager.closeTab(id);pane.tabIds.remove(id);pane.activeTabId=pane.tabIds.isEmpty?null:pane.tabIds.last;setState((){});},child:const Icon(Icons.close,size:13))]))}).toList())),IconButton(onPressed:(){final t=_tabManager.addTab();pane.tabIds.add(t.id);pane.activeTabId=t.id;_activatePane(pane);},icon:const Icon(Icons.add,size:18,color:NexusColors.accentPrimary)),IconButton(tooltip:'Vertikal split',onPressed:_splitVertical,icon:const Icon(Icons.view_column,size:17)),IconButton(tooltip:'Horizontal split',onPressed:_splitHorizontal,icon:const Icon(Icons.view_agenda,size:17)),IconButton(tooltip:'Terminal',onPressed:()=>_paneManager.setKind(PaneKind.terminal),icon:const Icon(Icons.terminal,size:17)),IconButton(tooltip:'DevTools',onPressed:()=>_paneManager.setKind(PaneKind.devtools),icon:const Icon(Icons.developer_mode,size:17))]));}
+    Widget _buildPaneTabStrip(PaneState pane) {
+    return SizedBox(
+      height: 38,
+      child: Row(
+        children: [
+          Expanded(
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              children: pane.tabIds.map((id) {
+                NexusTab? t;
+                for (final candidate in _tabManager.tabs) {
+                  if (candidate.id == id) { t = candidate; break; }
+                }
+                if (t == null) return const SizedBox.shrink();
+                final a = id == pane.activeTabId;
+                return GestureDetector(
+                  onTap: () {
+                    pane.activeTabId = id;
+                    _tabManager.switchTab(id);
+                    _activatePane(pane);
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    decoration: BoxDecoration(
+                      color: a ? NexusColors.accentPrimarySoft : NexusColors.bgSurface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: a ? NexusColors.accentPrimary : NexusColors.border),
+                    ),
+                    alignment: Alignment.center,
+                    child: Row(
+                      children: [
+                        Text(t.isHome ? 'Neuer Tab' : t.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11)),
+                        const SizedBox(width: 5),
+                        GestureDetector(
+                          onTap: () {
+                            _tabManager.closeTab(id);
+                          },
+                          child: const Icon(Icons.close, size: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildFramelessContent(NexusTab? tab){ return Stack(children:[Positioned.fill(child:_buildPaneTree(_paneManager.root)),if(_frameless&&!_revealChrome)const Positioned(top:0,left:0,right:0,height:12,child:MouseRegion(cursor:SystemMouseCursors.basic,child:SizedBox()))]); }
 
