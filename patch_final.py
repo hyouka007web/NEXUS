@@ -1,40 +1,7 @@
-import os
-
 code = '''import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
-
-class DownloadEntry {
-  final String id;
-  final String title;
-  final String filePath;
-  final int totalBytes;
-  final DateTime date;
-
-  DownloadEntry({
-    required this.id,
-    required this.title,
-    required this.filePath,
-    required this.totalBytes,
-    required this.date,
-  });
-
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'title': title,
-        'filePath': filePath,
-        'totalBytes': totalBytes,
-        'date': date.toIso8601String(),
-      };
-
-  factory DownloadEntry.fromJson(Map<String, dynamic> json) => DownloadEntry(
-        id: json['id'] ?? '',
-        title: json['title'] ?? '',
-        filePath: json['filePath'] ?? '',
-        totalBytes: json['totalBytes'] ?? 0,
-        date: DateTime.tryParse(json['date'] ?? '') ?? DateTime.now(),
-      );
-}
+import 'package:nexus_flutter/models/video_entry.dart';
 
 class VideoDownloader {
   static const Duration _connectTimeout = Duration(seconds: 15);
@@ -42,9 +9,9 @@ class VideoDownloader {
   static const String _userAgent =
       'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36';
 
-  static Future<File> download({
-    required String url,
-    required String savePath,
+  static Future<File> download(
+    String url,
+    String savePath, {
     String? title,
     String? referer,
     Map<String, String> headers = const {},
@@ -84,7 +51,7 @@ class VideoDownloader {
       await sink.flush();
       await sink.close();
 
-      await _addToIndex(DownloadEntry(
+      await _addToIndex(VideoEntry(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         title: title ?? 'Video Download',
         filePath: savePath,
@@ -154,29 +121,29 @@ class VideoDownloader {
     return bestUrl ?? mediaUrl;
   }
 
-  static Future<List<DownloadEntry>> loadIndex() async {
+  static Future<List<VideoEntry>> loadIndex() async {
     try {
       final file = File('/data/data/com.nexus.browser/files/downloads_index.json');
       if (!await file.exists()) return [];
       final content = await file.readAsString();
       final List list = jsonDecode(content);
-      return list.map((e) => DownloadEntry.fromJson(e)).toList();
+      return list.map((e) => VideoEntry.fromJson(e)).toList();
     } catch (_) {
       return [];
     }
   }
 
-  static Future<void> _addToIndex(DownloadEntry entry) async {
+  static Future<void> _addToIndex(VideoEntry entry) async {
     try {
       final items = await loadIndex();
       items.add(entry);
       final file = File('/data/data/com.nexus.browser/files/downloads_index.json');
-      await file.parent.create(recursive: True);
+      await file.parent.create(recursive: true);
       await file.writeAsString(jsonEncode(items.map((e) => e.toJson()).toList()));
     } catch (_) {}
   }
 
-  static Future<void> delete(DownloadEntry entry) async {
+  static Future<void> delete(VideoEntry entry) async {
     try {
       final file = File(entry.filePath);
       if (await file.exists()) await file.delete();
@@ -192,4 +159,4 @@ class VideoDownloader {
 with open('lib/engines/video_downloader.dart', 'w') as f:
     f.write(code)
 
-print("video_downloader.dart vollständig mit allen Schnittstellen neu generiert.")
+print("video_downloader.dart mit VideoEntry & gemischten Parametern gefixt.")
