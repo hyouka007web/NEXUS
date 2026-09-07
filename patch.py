@@ -1,4 +1,6 @@
-import 'dart:async';
+import os
+
+code = '''import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 
@@ -124,7 +126,7 @@ class VideoDownloader {
     if (!master.contains('#EXTM3U')) return null;
     if (!master.contains('#EXT-X-STREAM-INF')) return mediaUrl;
 
-    final lines = master.split('\n');
+    final lines = master.split('\\n');
     String? bestUrl;
     int maxBw = -1;
 
@@ -132,7 +134,7 @@ class VideoDownloader {
       final line = lines[i].trim();
       if (line.startsWith('#EXT-X-STREAM-INF:')) {
         int bw = 0;
-        final bwMatch = RegExp(r'BANDWIDTH=(\d+)').firstMatch(line);
+        final bwMatch = RegExp(r'BANDWIDTH=(\\d+)').firstMatch(line);
         if (bwMatch != null) {
           bw = int.tryParse(bwMatch.group(1) ?? '0') ?? 0;
         }
@@ -185,3 +187,9 @@ class VideoDownloader {
     } catch (_) {}
   }
 }
+'''
+
+with open('lib/engines/video_downloader.dart', 'w') as f:
+    f.write(code)
+
+print("video_downloader.dart vollständig mit allen Schnittstellen neu generiert.")
