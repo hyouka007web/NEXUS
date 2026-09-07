@@ -105,3 +105,44 @@ mussten (gzip angefragt, aber nie entpackt), kann hier von vornherein nicht
 auftreten. Alle Engines sind reines Dart ohne Plattform-Channel-Abhängigkeit
 (nur `dart:io`, `path_provider`) — sie laufen unverändert auf allen drei
 Plattformen.
+
+## Video Harvester 2.0
+
+Der Harvester arbeitet jetzt als mehrstufige Media-Candidate-Pipeline:
+
+- Chromium/WebView-Seite als echte Renderquelle
+- fetch/XHR-Beobachtung inklusive Request-Context, soweit die Seite ihn exponiert
+- `<video>`, `<source>`, `currentSrc`, Lazy-Load-Attribute und Player-Konfigurationen
+- `performance.getEntriesByType("resource")` als zusätzlicher Fallback
+- Same-Origin-iframe-Tiefenscan; Cross-Origin wird nicht per Same-Origin-Policy-Bypass angegriffen
+- begrenzter Scroll-/Play-Discovery-Pass für Lazy-Loaded Media
+- HLS/M3U8 Master-Playlist-Parsing mit Qualitätsstufen
+- DASH/MPD Parsing mit Representation-/Qualitätsstufen
+- Context-Weitergabe an den Downloader (Referer, User-Agent, exponierte Header/Cookies)
+- Stream-Aktion direkt aus der Harvester-Liste
+
+### Chromium-Grenze
+
+`webview_flutter` 4.x stellt keine öffentliche `onBeforeRequest`/DevTools-Network-
+Domain-API für jede einzelne Unterressource bereit. Deshalb ist der aktuelle
+Build maximal robust innerhalb der öffentlichen WebView-API: In-Page-Telemetrie
+und Render-Pass werden mit dem bestehenden WebView kombiniert. Ein späterer
+nativer Chromium-Adapter kann dieselben `MediaCapture`-Objekte direkt aus der
+Chromium Network Domain einspeisen, ohne Harvester/UI neu zu bauen.
+
+DRM, Widevine/PlayReady/FairPlay, CAPTCHA, Login- oder sonstige
+Zugriffsschutz-Umgehung ist ausdrücklich nicht Bestandteil des Harvesters.
+
+## Browser UI 2.0
+
+The Android browser now uses a content-first UI system:
+- global `Ctrl+K` command palette with fuzzy search, tabs, actions, bookmarks, history and settings;
+- pane-local tabs and recursive horizontal/vertical split views;
+- Browser / Terminal / DevTools pane modes;
+- frameless/focus mode (`Ctrl+Shift+F`) with `Ctrl+L` chrome reveal;
+- named workspaces containing tabs, pane topology and terminal sessions;
+- JSON-overridable theme tokens in `theme.json`;
+- local keybinding engine with Custom/Vim/Emacs/Gaming profiles;
+- native-style automatic darkening injection for loaded pages.
+
+See `docs/ui-system.md` for the component hierarchy, state model and wireframes.

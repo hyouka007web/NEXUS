@@ -1,104 +1,228 @@
 import 'dart:convert';
 
-/// Netzwerk-Sniffer per JS-Injection. Löst eine Lücke, die auch das
-/// gerenderte-DOM-Auslesen (`VideoHarvesterEngine.extractFromRenderedHtml`)
-/// nicht schließt: viele Player schreiben die eigentliche Stream-URL nie ins
-/// DOM, auch nicht nach dem Rendern — sie holen sie per `fetch()`/`XHR` und
-/// reichen sie direkt intern an `MediaSource`/`<video>` weiter. Ein reines
-/// "lies das DOM" sieht so eine URL nie, weil sie nirgends als Attribut
-/// oder JSON-Text steht.
-///
-/// Der Trick: ein Skript wird injiziert, das `window.fetch` und
-/// `XMLHttpRequest.prototype.open` überschreibt (klassisches "Network
-/// Sniffing per Monkey-Patch", dieselbe Technik, mit der z.B. Browser-
-/// Erweiterungen oder die Chrome-DevTools-"Network"-Ansicht arbeiten) und
-/// jede angefragte URL protokolliert, die nach Video/HLS/DASH aussieht.
-/// Zusätzlich wird auf `play`-Events von `<video>`-Elementen gelauscht und
-/// deren `currentSrc` erfasst — das fängt auch Fälle, in denen der Browser
-/// selbst (nicht die Seiten-JS) die Quelle setzt.
-///
-/// **Ehrliche Grenze:** Cross-Origin-iframes sind per Browser-Sicherheits-
-/// modell (Same-Origin-Policy) für injizierten JS-Code unerreichbar — das
-/// ist keine Einschränkung dieses Ansatzes, sondern eine harte Grenze des
-/// Web-Sicherheitsmodells selbst, die für jede Technik gilt, injiziertes JS
-/// eingeschlossen. Und: die Injektion passiert bei `onPageStarted`, also
-/// sobald die Navigation beginnt — synchron im `<head>` ausgeführte Skripte
-/// können in seltenen Fällen schneller sein als die Injektion. In der
-/// Praxis passiert der eigentliche Video-Request aber meist erst nach
-/// Nutzer-Interaktion (Play-Button) oder verzögertem Laden, wo dieses
-/// Zeitfenster keine Rolle mehr spielt.
+class MediaCapture {
+  final String url;
+  final String source;
+  final String pageUrl;
+  final String referrer;
+  final String userAgent;
+  final Map<String, String> headers;
+  final String cookies;
+  final String mimeType;
+
+  const MediaCapture({
+    required this.url,
+    this.source = 'NETWORK',
+    this.pageUrl = '',
+    this.referrer = '',
+    this.userAgent = '',
+    this.headers = const {},
+    this.cookies = '',
+    this.mimeType = '',
+  });
+
+  factory MediaCapture.fromJson(Map<String, dynamic> json) => MediaCapture(
+        url: '${json['url'] ?? ''}',
+        source: '${json['source'] ?? 'NETWORK'}',
+        pageUrl: '${json['pageUrl'] ?? ''}',
+        referrer: '${json['referrer'] ?? ''}',
+        userAgent: '${json['userAgent'] ?? ''}',
+        cookies: '${json['cookies'] ?? ''}',
+        mimeType: '${json['mimeType'] ?? ''}',
+        headers: (json['headers'] as Map?)?.map(
+              (k, v) => MapEntry('$k', '$v'),
+            ) ??
+            const {},
+      );
+}
+
+/// In-page media telemetry. It complements, rather than pretends to replace,
+/// Chromium's native Network domain: webview_flutter 4.x does not expose a
+/// public per-resource interception callback. The script therefore observes
+/// fetch/XHR, media elements, performance resources, player configuration and
+/// same-origin iframes. A future native Chromium adapter can feed the exact
+/// same MediaCapture schema without changing the harvester UI.
 class NetworkSniffer {
   NetworkSniffer._();
 
-  static const String injectionScript = '''
+  static const String injectionScript = r'''
 (function() {
-  if (window.__nexusSniffInstalled) return;
-  window.__nexusSniffInstalled = true;
-  window.__nexusSniffed = window.__nexusSniffed || [];
+  if (window.__nexusHarvesterInstalled) return;
+  window.__nexusHarvesterInstalled = true;
+  window.__nexusMedia = window.__nexusMedia || [];
+  var list = window.__nexusMedia;
+  var MAX = 1200;
+  var mediaRe = /\.(m3u8|mpd|mp4|m4v|webm|mov|m4s|ts|ogv|3gp)(?:[?#]|$)/i;
+  var pathRe = /\/(hls|dash|manifest|playlist|master|segment|stream|media)(?:[/?#]|$)/i;
+  var mimeRe = /^(video\/|application\/(?:vnd\.apple\.mpegurl|x-mpegurl|dash\+xml))/i;
 
-  function looksLikeMedia(url) {
-    if (typeof url !== 'string') return false;
-    return /\\.(m3u8|mpd|mp4|webm|m4s|ts)(\\?|\$)/i.test(url)
-      || /\\/(hls|dash|manifest|playlist|segment)/i.test(url);
+  function abs(url) {
+    try { return new URL(String(url), location.href).href; } catch(e) { return ''; }
   }
-
-  function record(url) {
+  function likely(url, mime) {
+    if (!url || /^data:|^javascript:/i.test(url)) return false;
+    return mediaRe.test(url) || pathRe.test(url) || (mime && mimeRe.test(mime));
+  }
+  function contextHeaders(h) {
+    var out = {};
     try {
-      if (!looksLikeMedia(url)) return;
-      if (window.__nexusSniffed.indexOf(url) === -1) {
-        window.__nexusSniffed.push(url);
-      }
-    } catch (e) {}
+      if (!h) return out;
+      if (h instanceof Headers) h.forEach(function(v,k){ out[k] = v; });
+      else Object.keys(h).forEach(function(k){ out[k] = String(h[k]); });
+    } catch(e) {}
+    return out;
+  }
+  function record(url, source, extra) {
+    try {
+      url = abs(url);
+      extra = extra || {};
+      var mime = extra.mimeType || '';
+      if (!likely(url, mime)) return;
+      var item = {
+        url: url,
+        source: source || 'NETWORK',
+        pageUrl: location.href,
+        referrer: document.referrer || '',
+        userAgent: navigator.userAgent || '',
+        cookies: document.cookie || '',
+        headers: extra.headers || {},
+        mimeType: mime
+      };
+      var key = item.url + '|' + item.source;
+      for (var i=0; i<list.length; i++) if (list[i].url + '|' + list[i].source === key) return;
+      if (list.length >= MAX) list.shift();
+      list.push(item);
+    } catch(e) {}
   }
 
-  var origFetch = window.fetch;
-  if (origFetch) {
-    window.fetch = function(input, init) {
-      try {
-        record(typeof input === 'string' ? input : (input && input.url));
-      } catch (e) {}
-      return origFetch.apply(this, arguments);
-    };
-  }
-
-  var origOpen = XMLHttpRequest.prototype.open;
-  XMLHttpRequest.prototype.open = function(method, url) {
-    try { record(url); } catch (e) {}
-    return origOpen.apply(this, arguments);
+  var oldFetch = window.fetch;
+  if (oldFetch) window.fetch = function(input, init) {
+    try {
+      var url = typeof input === 'string' ? input : (input && input.url);
+      var headers = contextHeaders(init && init.headers);
+      record(url, 'FETCH', {headers: headers});
+    } catch(e) {}
+    var p = oldFetch.apply(this, arguments);
+    try { p.then(function(res){ if (res && res.url) record(res.url, 'FETCH_RESPONSE', {mimeType: res.headers && res.headers.get('content-type') || ''}); }); } catch(e) {}
+    return p;
   };
 
-  document.addEventListener('play', function(e) {
-    try {
-      var t = e.target;
-      if (t && t.currentSrc) record(t.currentSrc);
-      if (t && t.src) record(t.src);
-    } catch (e) {}
-  }, true);
+  var oldOpen = XMLHttpRequest.prototype.open;
+  var oldSend = XMLHttpRequest.prototype.send;
+  var oldSet = XMLHttpRequest.prototype.setRequestHeader;
+  XMLHttpRequest.prototype.open = function(method, url) {
+    try { this.__nexusUrl = url; this.__nexusHeaders = {}; } catch(e) {}
+    return oldOpen.apply(this, arguments);
+  };
+  XMLHttpRequest.prototype.setRequestHeader = function(k,v) {
+    try { this.__nexusHeaders = this.__nexusHeaders || {}; this.__nexusHeaders[k] = v; } catch(e) {}
+    return oldSet.apply(this, arguments);
+  };
+  XMLHttpRequest.prototype.send = function() {
+    try { record(this.__nexusUrl, 'XHR', {headers: this.__nexusHeaders || {}}); } catch(e) {}
+    return oldSend.apply(this, arguments);
+  };
 
-  // Bereits vorhandene <video>/<source>-Elemente auch ohne Play-Event
-  // erfassen, falls die Quelle schon beim Injektionszeitpunkt gesetzt ist.
-  document.querySelectorAll('video, source').forEach(function(el) {
-    if (el.currentSrc) record(el.currentSrc);
-    if (el.src) record(el.src);
-  });
+  function scanVideo(root) {
+    try {
+      (root.querySelectorAll ? root.querySelectorAll('video, audio, source') : []).forEach(function(el){
+        record(el.currentSrc || el.src || el.getAttribute('src') || el.getAttribute('data-src'), 'DOM_MEDIA', {mimeType: el.getAttribute('type') || ''});
+      });
+    } catch(e) {}
+  }
+  function scanPlayers(root) {
+    try {
+      var scripts = root.querySelectorAll ? root.querySelectorAll('script') : [];
+      scripts.forEach(function(s){
+        var t = s.textContent || '';
+        if (/hls\.js|video\.js|shaka|plyr|jwplayer|m3u8|\.mpd/i.test(t)) {
+          var m, re = /https?:\\?\/\\?\/[^\s"'<>\\]+|(?:blob:)[^\s"'<>]+/gi;
+          while ((m = re.exec(t))) record(m[0].replace(/\\\//g,'/'), 'PLAYER_CONFIG');
+        }
+      });
+      ['__INITIAL_STATE__','__NEXT_DATA__','__NUXT__'].forEach(function(k){
+        try { var v = window[k]; if (v) scanObject(v, 'PLAYER_CONFIG'); } catch(e) {}
+      });
+    } catch(e) {}
+  }
+  function scanObject(obj, source, seen) {
+    seen = seen || [];
+    if (!obj || seen.indexOf(obj) >= 0 || seen.length > 100) return;
+    if (typeof obj === 'string') { if (/^(https?:|blob:)/i.test(obj)) record(obj, source); return; }
+    if (typeof obj !== 'object') return;
+    seen.push(obj);
+    try { Object.keys(obj).slice(0,300).forEach(function(k){ scanObject(obj[k], source, seen); }); } catch(e) {}
+  }
+  function scanPerformance() {
+    try { performance.getEntriesByType('resource').forEach(function(e){ record(e.name, 'PERFORMANCE', {mimeType: e.initiatorType === 'video' ? 'video/*' : ''}); }); } catch(e) {}
+  }
+  function scanFrames() {
+    try {
+      document.querySelectorAll('iframe').forEach(function(frame){
+        try {
+          var d = frame.contentDocument;
+          if (d) { scanVideo(d); scanPlayers(d); }
+        } catch(e) { /* cross-origin: native/network layer must handle it */ }
+      });
+    } catch(e) {}
+  }
+  function scanAll() { scanVideo(document); scanPlayers(document); scanPerformance(); scanFrames(); }
+
+  document.addEventListener('play', function(e){
+    try { var t=e.target; record(t.currentSrc || t.src, 'MEDIA_PLAY', {mimeType:t.currentSrc ? 'video/*' : ''}); } catch(e) {}
+  }, true);
+  document.addEventListener('loadedmetadata', function(e){
+    try { var t=e.target; record(t.currentSrc || t.src, 'MEDIA_METADATA', {mimeType:'video/*'}); } catch(e) {}
+  }, true);
+  new MutationObserver(function(){ scanAll(); }).observe(document.documentElement || document, {subtree:true, childList:true, attributes:true, attributeFilter:['src','srcset','data-src','data-url','data-video','data-file']});
+  scanAll();
 })();
 ''';
 
-  /// Liest die bisher gesammelten URLs aus der Seite zurück. `raw` ist das
-  /// JSON-kodierte Ergebnis von `runJavaScriptReturningResult` — auf
-  /// Android kommt das immer als JSON-String-Literal zurück (auch wenn der
-  /// eigentliche Wert selbst schon JSON ist), daher der doppelte Decode.
-  static List<String> parseResult(Object raw) {
+  /// Starts a bounded discovery pass in the currently rendered document.
+  /// It intentionally does not bypass the same-origin policy.
+  static const String discoveryScript = r'''
+(function(){
+  if (window.__nexusDiscoveryRunning) return;
+  window.__nexusDiscoveryRunning = true;
+  var steps = 0;
+  var timer = setInterval(function(){
     try {
-      var decoded = jsonDecode(raw.toString());
+      window.scrollBy(0, Math.max(300, window.innerHeight * 0.75));
+      document.querySelectorAll('button,[role=\"button\"],video').forEach(function(el){
+        var text=((el.innerText||el.getAttribute('aria-label')||el.title||'')+'').toLowerCase();
+        if (el.tagName.toLowerCase()==='video' || /^(play|watch|play video)/.test(text)) {
+          try { if (el.tagName.toLowerCase()==='video') el.play().catch(function(){}); else el.click(); } catch(e) {}
+        }
+      });
+      if (window.__nexusHarvesterInstalled) {
+        document.querySelectorAll('video,source').forEach(function(el){
+          var u=el.currentSrc||el.src||el.getAttribute('data-src');
+          if (u) { try { var x=new URL(u,location.href).href; if (window.__nexusMedia && window.__nexusMedia.length<1200) window.__nexusMedia.push({url:x,source:'DISCOVERY',pageUrl:location.href,referrer:document.referrer||'',userAgent:navigator.userAgent||'',cookies:document.cookie||'',headers:{},mimeType:el.getAttribute('type')||''}); } catch(e){} }
+        });
+      }
+      steps++;
+      if (steps>=12) { clearInterval(timer); window.__nexusDiscoveryRunning=false; window.scrollTo(0,0); }
+    } catch(e) { clearInterval(timer); window.__nexusDiscoveryRunning=false; }
+  }, 650);
+})();
+''';
+
+  static List<MediaCapture> parseCaptures(Object raw) {
+    try {
+      dynamic decoded = jsonDecode(raw.toString());
       if (decoded is String) decoded = jsonDecode(decoded);
       if (decoded is List) {
-        return decoded.whereType<String>().toList();
+        return decoded
+            .whereType<Map>()
+            .map((e) => MediaCapture.fromJson(Map<String, dynamic>.from(e)))
+            .where((e) => e.url.isNotEmpty)
+            .toList();
       }
-    } catch (_) {
-      // Sniffer-Ergebnis war leer/kaputt — einfach nichts beitragen,
-      // die übrigen Erkennungswege (DOM, Netzwerk-Crawl) laufen weiter.
-    }
+    } catch (_) {}
     return const [];
   }
+
+  static List<String> parseResult(Object raw) =>
+      parseCaptures(raw).map((e) => e.url).toSet().toList();
 }

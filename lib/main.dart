@@ -7,6 +7,7 @@ import 'package:webview_windows/webview_windows.dart' as win;
 import 'screens/browser_screen.dart';
 import 'screens/tools_test_screen.dart';
 import 'theme/nexus_theme.dart';
+import 'state/theme_config.dart';
 
 const String testUrl = 'https://example.com';
 
@@ -15,14 +16,21 @@ void main() {
   runApp(const NexusFlutterApp());
 }
 
-class NexusFlutterApp extends StatelessWidget {
+class NexusFlutterApp extends StatefulWidget {
   const NexusFlutterApp({super.key});
+  @override State<NexusFlutterApp> createState()=>_NexusFlutterAppState();
+}
+
+class _NexusFlutterAppState extends State<NexusFlutterApp> {
+  bool ready=false;
+  @override void initState(){super.initState(); ThemeConfig.instance.load().whenComplete(()=>setState(()=>ready=true));}
 
   @override
   Widget build(BuildContext context) {
+    if(!ready) return const MaterialApp(home:Scaffold(body:Center(child:CircularProgressIndicator())));
     return MaterialApp(
       title: 'NEXUS',
-      theme: buildNexusTheme(),
+      theme: ThemeConfig.instance.materialTheme(),
       home: _home,
     );
   }

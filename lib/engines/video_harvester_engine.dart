@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../models/harvested_video.dart';
+import 'manifest_parser.dart';
+import 'network_sniffer.dart';
 
 /// Discovers publicly exposed video/player URLs. No DRM/login/CAPTCHA/access-
 /// control bypass. 1:1-Verhalten zu Kotlins `VideoHarvesterEngine`.
@@ -99,10 +101,25 @@ class VideoHarvesterEngine {
 
   static List<HarvestedVideo> classifyUrls(
     List<String> urls,
+    String pageTitle, {
+    String pageUrl = '',
+    String referrer = '',
+    String userAgent = '',
+  }) {
+    return classifyCaptures(urls.map((url) => MediaCapture(
+          url: url, pageUrl: pageUrl, referrer: referrer, userAgent: userAgent,
+        )).toList(), pageTitle);
+  }
+
+  static List<HarvestedVideo> classifyCaptures(
+    List<MediaCapture> captures,
     String pageTitle,
   ) {
     final out = <HarvestedVideo>[];
-    for (final raw in urls) {
+    final seen = <String>{};
+    for (final capture in captures) {
+      final raw = capture.url;
+      if (!seen.add(raw)) continue;
       final normalized = _normalize(raw);
       if (normalized == null) continue;
       final type = _classify(normalized);
@@ -118,7 +135,13 @@ class VideoHarvesterEngine {
         url: normalized,
         host: host,
         type: type,
-        status: 'MEDIA SOURCE (Netzwerk-Sniffer)',
+        status: 'MEDIA SOURCE · ${capture.source}',
+        source: capture.source,
+        pageUrl: capture.pageUrl,
+        referrer: capture.referrer,
+        userAgent: capture.userAgent,
+        headers: capture.headers,
+        cookies: capture.cookies,
       ));
     }
     return out;
@@ -150,9 +173,29 @@ class VideoHarvesterEngine {
         host: host,
         type: type,
         status: status,
+        source: 'DOM',
+        pageUrl: baseUrl,
       ));
     }
     return out;
+  }
+
+  /// Parses public HLS/DASH manifests and attaches quality variants.
+  static Future<HarvestedVideo> enrichManifest(HarvestedVideo video) async {
+    if (video.type != 'M3U8' && video.type != 'DASH') return video;
+    final variants = await ManifestParser.inspect(video.url, headers: {
+      ...video.headers,
+      if (video.referrer.isNotEmpty) 'Referer': video.referrer,
+      if (video.userAgent.isNotEmpty) 'User-Agent': video.userAgent,
+      if (video.cookies.isNotEmpty) 'Cookie': video.cookies,
+    });
+    if (variants.isEmpty) return video;
+    final best = variants.reduce((a, b) => a.bandwidth >= b.bandwidth ? a : b);
+    return video.copyWith(
+      variants: variants,
+      quality: best.quality,
+      status: '${video.status} · ${variants.length} Qualitätsstufen',
+    );
   }
 
   static Future<String?> _fetchHtml(String url) async {

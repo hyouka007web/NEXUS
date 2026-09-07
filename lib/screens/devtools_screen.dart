@@ -46,7 +46,7 @@ class _DevToolsScreenState extends State<DevToolsScreen> {
     setState(() => _loadingSniffed = true);
     try {
       final raw = await widget.tab.controller.runJavaScriptReturningResult(
-        'JSON.stringify(window.__nexusSniffed || [])',
+        'JSON.stringify(window.__nexusMedia || [])',
       );
       setState(() => _sniffed = NetworkSniffer.parseResult(raw));
     } catch (_) {

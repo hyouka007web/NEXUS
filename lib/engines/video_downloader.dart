@@ -65,6 +65,7 @@ class VideoDownloader {
     String pageTitle, {
     String? referer,
     void Function(DownloadProgress)? onProgress,
+    Map<String, String> headers = const {},
   }) async {
     if (!mediaUrl.startsWith('http://') && !mediaUrl.startsWith('https://')) {
       throw ArgumentError('mediaUrl muss http(s) sein: $mediaUrl');
@@ -81,8 +82,8 @@ class VideoDownloader {
       );
     }
     return _looksLikeHls(mediaUrl)
-        ? _downloadHls(mediaUrl, pageTitle, referer, onProgress)
-        : _downloadDirect(mediaUrl, pageTitle, referer, onProgress);
+        ? _downloadHls(mediaUrl, pageTitle, referer, onProgress, headers)
+        : _downloadDirect(mediaUrl, pageTitle, referer, onProgress, headers);
   }
 
   static Future<VideoEntry> _downloadDirect(
@@ -90,6 +91,7 @@ class VideoDownloader {
     String pageTitle,
     String? referer,
     void Function(DownloadProgress)? onProgress,
+    Map<String, String> headers = const {},
   ) async {
     final id = _randomId();
     final ext = _guessExtension(mediaUrl, null);
@@ -110,6 +112,7 @@ class VideoDownloader {
         mediaUrl,
         referer,
         existing > 0 ? existing : null,
+        headers,
       ).timeout(_readTimeout);
 
       // dart:io hat wie java.net.HttpURLConnection keine Konstante für 416
@@ -119,7 +122,7 @@ class VideoDownloader {
         await response.drain<void>();
         existing = 0;
         if (await part.exists()) await part.delete();
-        return _downloadDirect(mediaUrl, pageTitle, referer, onProgress);
+        return _downloadDirect(mediaUrl, pageTitle, referer, onProgress, headers);
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
         await response.drain<void>();
@@ -188,10 +191,18 @@ class VideoDownloader {
     String url,
     String? referer,
     int? rangeFrom,
+    Map<String, String> headers = const {},
   ) async {
     final request = await client.getUrl(Uri.parse(url));
-    request.headers.set(HttpHeaders.userAgentHeader, _userAgent);
+    request.headers.set(HttpHeaders.userAgentHeader, headers['User-Agent'] ?? _userAgent);
     request.headers.set(HttpHeaders.acceptHeader, '*/*');
+    headers.forEach((k, v) {
+      if (k.toLowerCase() != 'user-agent' && k.toLowerCase() != 'referer') {
+        try { request.headers.set(k, v); } catch (_) {}
+      }
+    });
+    final cookie = headers['Cookie'];
+    if (cookie != null && cookie.isNotEmpty) request.headers.set(HttpHeaders.cookieHeader, cookie);
     if (referer != null && referer.isNotEmpty) {
       request.headers.set(HttpHeaders.refererHeader, referer);
       try {
@@ -216,9 +227,10 @@ class VideoDownloader {
     String pageTitle,
     String? referer,
     void Function(DownloadProgress)? onProgress,
+    Map<String, String> headers = const {},
   ) async {
-    final master = await _fetchText(mediaUrl, referer);
-    final playlist = await _chooseVariant(master, mediaUrl, referer);
+    final master = await _fetchText(mediaUrl, referer, headers);
+    final playlist = await _chooseVariant(master, mediaUrl, referer, headers);
     if (playlist.toUpperCase().contains('#EXT-X-KEY') &&
         !playlist.toUpperCase().contains('METHOD=NONE')) {
       throw StateError('Verschlüsselte HLS-Streams werden nicht entschlüsselt');
@@ -245,7 +257,7 @@ class VideoDownloader {
     try {
       for (var i = 0; i < segments.length; i++) {
         final response =
-            await _openRange(client, segments[i], referer, null)
+            await _openRange(client, segments[i], referer, null, headers)
                 .timeout(_readTimeout);
         if (response.statusCode < 200 || response.statusCode >= 300) {
           await response.drain<void>();
@@ -278,6 +290,7 @@ class VideoDownloader {
     String master,
     String base,
     String? referer,
+    Map<String, String> headers = const {},
   ) async {
     final lines =
         master.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
@@ -302,7 +315,7 @@ class VideoDownloader {
       }
     }
     if (bestUrl == null) return master;
-    return _fetchText(bestUrl, referer);
+    return _fetchText(bestUrl, referer, headers);
   }
 
   static List<String> _parseSegments(String playlist, String base) {
@@ -322,11 +335,11 @@ class VideoDownloader {
     return out;
   }
 
-  static Future<String> _fetchText(String url, String? referer) async {
+  static Future<String> _fetchText(String url, String? referer, [Map<String, String> headers = const {}]) async {
     final client = HttpClient()..connectionTimeout = _connectTimeout;
     try {
       final response =
-          await _openRange(client, url, referer, null).timeout(_readTimeout);
+          await _openRange(client, url, referer, null, headers).timeout(_readTimeout);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         await response.drain<void>();
         throw StateError('HTTP ${response.statusCode}');

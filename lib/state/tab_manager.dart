@@ -59,6 +59,7 @@ class TabManager extends ChangeNotifier {
     String url = kHomeSentinel,
     bool navigate = true,
     bool persist = true,
+    String? id,
   }) {
     final controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted);
@@ -66,7 +67,7 @@ class TabManager extends ChangeNotifier {
     if (uaOverride != null && uaOverride.isNotEmpty) {
       controller.setUserAgent(uaOverride);
     }
-    final tab = NexusTab(controller: controller, url: url);
+    final tab = NexusTab(id: id, controller: controller, url: url);
 
     controller.setNavigationDelegate(
       RedirectShield.build(
@@ -93,6 +94,33 @@ class TabManager extends ChangeNotifier {
     notifyListeners();
     if (persist) _persist();
     return tab;
+  }
+
+
+  List<Map<String, dynamic>> exportSnapshot() => tabs.map((t) => {
+    'id': t.id, 'url': t.url, 'title': t.title,
+  }).toList();
+
+  Future<void> restoreSnapshot(List<Map<String, dynamic>> snapshot) async {
+    for (final t in tabs) {
+      // WebViewController has no public dispose API; removing the tab is enough
+      // for Flutter to release the widget when the old tree is rebuilt.
+    }
+    tabs.clear();
+    for (final item in snapshot) {
+      final url = item['url'] as String? ?? kHomeSentinel;
+      final tab = addTab(
+        id: item['id'] as String?,
+        url: url,
+        navigate: url != kHomeSentinel,
+        persist: false,
+      );
+      tab.title = item['title'] as String? ?? (url == kHomeSentinel ? 'Neuer Tab' : url);
+    }
+    if (tabs.isEmpty) addTab(persist: false);
+    activeIndex = 0;
+    notifyListeners();
+    await _persist();
   }
 
   void closeTab(String tabId) {

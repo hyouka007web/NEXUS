@@ -17,6 +17,13 @@ import '../models/tab_model.dart';
 import '../state/dev_settings.dart';
 import '../state/download_repository.dart';
 import '../state/tab_manager.dart';
+import '../state/pane_manager.dart';
+import '../state/workspace_manager.dart';
+import '../state/keybinding_engine.dart';
+import '../state/command_registry.dart';
+import '../state/theme_config.dart';
+import '../ui/command_palette.dart';
+import '../ui/terminal_pane.dart';
 import '../theme/nexus_theme.dart';
 import 'devtools_screen.dart';
 import 'downloads_panel.dart';
@@ -44,8 +51,12 @@ class BrowserScreen extends StatefulWidget {
 
 class _BrowserScreenState extends State<BrowserScreen> {
   final _tabManager = TabManager();
+  final _paneManager = PaneManager();
+  final _addressFocus = FocusNode();
   final _urlController = TextEditingController();
   bool _sidebarExpanded = false;
+  bool _frameless = false;
+  bool _revealChrome = false;
   bool _restoring = true;
   String? _notification;
   VoidCallback? _notificationAction;
@@ -55,11 +66,14 @@ class _BrowserScreenState extends State<BrowserScreen> {
   void initState() {
     super.initState();
     _tabManager.addListener(_onTabManagerChanged);
+    _paneManager.addListener(_onPaneChanged);
     _restoreTabs();
   }
 
   Future<void> _restoreTabs() async {
-    await Future.wait([_tabManager.restore(), DevSettings.instance.restore()]);
+    await Future.wait([_tabManager.restore(), DevSettings.instance.restore(), WorkspaceManager.instance.restore(), KeybindingEngine.instance.restore()]);
+    _paneManager.ensureActive();
+    for (final t in _tabManager.tabs) { if (!_paneManager.leaves.any((p) => p.tabIds.contains(t.id))) { _paneManager.leaves.first.tabIds.add(t.id); _paneManager.leaves.first.activeTabId ??= t.id; } }
     _syncUrlField();
     if (mounted) setState(() => _restoring = false);
   }
@@ -67,8 +81,15 @@ class _BrowserScreenState extends State<BrowserScreen> {
   @override
   void dispose() {
     _tabManager.removeListener(_onTabManagerChanged);
+    _paneManager.removeListener(_onPaneChanged);
     _urlController.dispose();
+    _addressFocus.dispose();
     super.dispose();
+  }
+
+  void _onPaneChanged() {
+    _syncUrlField();
+    if (mounted) setState(() {});
   }
 
   void _onTabManagerChanged() {
@@ -88,7 +109,9 @@ class _BrowserScreenState extends State<BrowserScreen> {
   }
 
   void _syncUrlField() {
-    final tab = _tabManager.activeTab;
+    _paneManager.ensureActive();
+    final paneTabId = _paneManager.activePane.activeTabId;
+    final tab = paneTabId == null ? _tabManager.activeTab : _tabManager.tabs.where((t) => t.id == paneTabId).cast<NexusTab?>().firstWhere((t) => t != null, orElse: () => _tabManager.activeTab);
     if (tab == null) return;
     final text = tab.isHome ? '' : tab.url;
     if (_urlController.text != text) {
@@ -190,11 +213,14 @@ class _BrowserScreenState extends State<BrowserScreen> {
       // einzige Ebene, die auch Player findet, die ihre Stream-URL NIE ins
       // DOM schreiben, sondern nur intern an MediaSource/<video> weiterreichen.
       try {
+        await tab.controller.runJavaScript(NetworkSniffer.injectionScript);
+        await tab.controller.runJavaScript(NetworkSniffer.discoveryScript);
+        await Future<void>.delayed(const Duration(seconds: 8));
         final raw = await tab.controller.runJavaScriptReturningResult(
-          'JSON.stringify(window.__nexusSniffed || [])',
+          'JSON.stringify(window.__nexusMedia || [])',
         );
-        for (final v in VideoHarvesterEngine.classifyUrls(
-          NetworkSniffer.parseResult(raw),
+        for (final v in VideoHarvesterEngine.classifyCaptures(
+          NetworkSniffer.parseCaptures(raw),
           tab.title,
         )) {
           merged[v.url] = v;
@@ -234,6 +260,15 @@ class _BrowserScreenState extends State<BrowserScreen> {
       // aktuell offenen Tab selbst gar nicht sichtbar sind.
       for (final v in await compute(_harvestIsolate, tab.url)) {
         merged.putIfAbsent(v.url, () => v);
+      }
+
+      // Manifest pass: inspect the first bounded set of HLS/DASH candidates
+      // and attach quality variants without blocking the UI isolate.
+      final keys = merged.keys.toList();
+      for (final key in keys.take(24)) {
+        final current = merged[key];
+        if (current == null || (current.type != 'M3U8' && current.type != 'DASH')) continue;
+        merged[key] = await VideoHarvesterEngine.enrichManifest(current);
       }
 
       if (!mounted) return;
@@ -313,32 +348,33 @@ class _BrowserScreenState extends State<BrowserScreen> {
                         final v = filtered[i];
                         const downloadable = {'MP4', 'WEBM', 'M3U8', 'MEDIA'};
                         final canDownload = downloadable.contains(v.type);
+                        final quality = v.quality.isEmpty ? '' : ' · ${v.quality}';
                         return ListTile(
                           title: Text(v.title.isEmpty ? v.host : v.title,
                               maxLines: 1, overflow: TextOverflow.ellipsis),
                           subtitle: Text(
-                            canDownload
-                                ? '${v.type} · ${v.status}'
-                                : v.type == 'DASH'
-                                    ? 'DASH erkannt — Download noch nicht unterstützt'
-                                    : 'Nur Player-/Einbettungsseite — keine direkte '
-                                        'Videodatei gefunden (z.B. YouTube-Links '
-                                        'lassen sich so generell nicht extrahieren)',
-                            maxLines: 2,
+                            '${v.type}$quality · ${v.status}',
+                            maxLines: 3,
                             overflow: TextOverflow.ellipsis,
-                            style: canDownload
-                                ? null
-                                : const TextStyle(color: NexusColors.textMuted),
+                            style: canDownload ? null : const TextStyle(color: NexusColors.textMuted),
                           ),
-                          isThreeLine: !canDownload,
-                          trailing: canDownload
-                              ? IconButton(
-                                  icon: const Icon(Icons.download,
-                                      color: NexusColors.accentPrimary),
+                          isThreeLine: true,
+                          trailing: Wrap(
+                            spacing: 0,
+                            children: [
+                              IconButton(
+                                tooltip: 'Stream öffnen',
+                                icon: const Icon(Icons.play_arrow, color: NexusColors.accentPrimary),
+                                onPressed: () => tab.controller.loadRequest(Uri.parse(v.url)),
+                              ),
+                              if (canDownload)
+                                IconButton(
+                                  tooltip: 'Download',
+                                  icon: const Icon(Icons.download, color: NexusColors.accentPrimary),
                                   onPressed: () => _downloadVideo(v, referer),
-                                )
-                              : const Icon(Icons.block,
-                                  color: NexusColors.textMuted, size: 20),
+                                ),
+                            ],
+                          ),
                         );
                       },
                     ),
@@ -360,6 +396,11 @@ class _BrowserScreenState extends State<BrowserScreen> {
         video.url,
         video.title,
         referer: referer,
+        headers: {
+          ...video.headers,
+          if (video.cookies.isNotEmpty) 'Cookie': video.cookies,
+          if (video.userAgent.isNotEmpty) 'User-Agent': video.userAgent,
+        },
         onProgress: (progress) {
           if (progress.percent >= 0) {
             DownloadRepository.instance.update(task, progress.percent);
@@ -383,37 +424,40 @@ class _BrowserScreenState extends State<BrowserScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_restoring) {
-      return const Scaffold(
-        backgroundColor: NexusColors.bgBase,
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-    final tab = _tabManager.activeTab;
-    return Scaffold(
-      backgroundColor: NexusColors.bgBase,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildTopBarRow1(),
-            _buildAddressBar(tab),
-            _buildTabStrip(),
-            Expanded(
-              child: Stack(
-                children: [
-                  Row(
-                    children: [
-                      _buildSidebar(),
-                      Expanded(child: _buildContent(tab)),
-                    ],
-                  ),
-                  if (_notification != null) _buildBottomNotification(),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+    if (_restoring) return const Scaffold(backgroundColor: NexusColors.bgBase, body: Center(child: CircularProgressIndicator()));
+    final tab = _tabForPane(_paneManager.activePane);
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyK, control: true): _openCommandPalette,
+        const SingleActivator(LogicalKeyboardKey.keyL, control: true): _focusAddress,
+        const SingleActivator(LogicalKeyboardKey.keyT, control: true): _newTabInPane,
+        const SingleActivator(LogicalKeyboardKey.keyW, control: true): _closeActivePaneTab,
+        const SingleActivator(LogicalKeyboardKey.keyR, control: true): _tabManager.reload,
+        const SingleActivator(LogicalKeyboardKey.keyF, control: true, shift: true): ()=>setState(()=>_frameless=!_frameless),
+        const SingleActivator(LogicalKeyboardKey.keyM, control: true, shift: true): _runHarvester,
+        const SingleActivator(LogicalKeyboardKey.keyV, control: true, alt: true): _splitVertical,
+        const SingleActivator(LogicalKeyboardKey.keyH, control: true, alt: true): _splitHorizontal,
+        const SingleActivator(LogicalKeyboardKey.keyT, control: true, alt: true): ()=>_paneManager.setKind(PaneKind.terminal),
+        const SingleActivator(LogicalKeyboardKey.keyI, control: true, shift: true): ()=>_paneManager.setKind(PaneKind.devtools),
+      },
+      child: Focus(autofocus:true,child:Scaffold(backgroundColor:NexusColors.bgBase,body:SafeArea(
+        child: _frameless
+          ? Stack(children:[
+              Positioned.fill(child:_buildPaneTree(_paneManager.root)),
+              Positioned(top:0,left:0,right:0,height:18,child:MouseRegion(onEnter:(_)=>setState(()=>_revealChrome=true),child:const SizedBox())),
+              if(_revealChrome) Positioned(top:0,left:0,right:0,child:Material(color:NexusColors.bgBase,elevation:6,child:Column(children:[_buildTopBarRow1(),_buildAddressBar(tab)]))),
+              if(_notification!=null) _buildBottomNotification(),
+            ])
+          : Column(children:[
+              _buildTopBarRow1(),
+              _buildAddressBar(tab),
+              Expanded(child:Row(children:[
+                _buildSidebar(),
+                Expanded(child:_buildPaneTree(_paneManager.root)),
+              ])),
+              if(_notification!=null) _buildBottomNotification(),
+            ]),
+      )))
     );
   }
 
@@ -573,6 +617,107 @@ class _BrowserScreenState extends State<BrowserScreen> {
     );
   }
 
+
+  void _activatePane(PaneState pane) {
+    _paneManager.activePaneId = pane.id;
+    final id = pane.activeTabId;
+    if (id != null) _tabManager.switchTab(id);
+    _syncUrlField(); setState(() {});
+  }
+
+  NexusTab? _tabForPane(PaneState pane) {
+    final id = pane.activeTabId ?? (pane.tabIds.isEmpty ? null : pane.tabIds.first);
+    if (id == null) return null;
+    for (final t in _tabManager.tabs) { if (t.id == id) return t; }
+    return null;
+  }
+
+  void _newTabInPane() {
+    _paneManager.ensureActive();
+    final t = _tabManager.addTab();
+    final p = _paneManager.activePane; p.tabIds.add(t.id); p.activeTabId=t.id;
+    setState(() {});
+  }
+
+  void _closeActivePaneTab() {
+    _paneManager.ensureActive(); final p=_paneManager.activePane; final id=p.activeTabId;
+    if(id==null)return; _tabManager.closeTab(id); p.tabIds.remove(id); p.activeTabId=p.tabIds.isEmpty?null:p.tabIds.last; if(p.tabIds.isEmpty){final t=_tabManager.addTab();p.tabIds.add(t.id);p.activeTabId=t.id;} setState(() {});
+  }
+
+  void _openCommandPalette() {
+    showDialog(context: context, barrierColor: Colors.black54, builder: (_) => CommandPalette(tabManager: _tabManager, items: _paletteItems()));
+  }
+
+  List<PaletteItem> _paletteItems() => [
+    PaletteItem('Video Harvester starten','Actions',Icons.video_collection_outlined,_runHarvester,commandId:NexusCommands.harvest),
+    PaletteItem('Komplett-Analyse starten','Actions',Icons.travel_explore,_runScraper,commandId:'scraper.run'),
+    PaletteItem('Neuer Tab','Actions',Icons.add,_newTabInPane,commandId:NexusCommands.newTab),
+    PaletteItem('Zurück','Actions',Icons.arrow_back,_tabManager.goBack,commandId:NexusCommands.back),
+    PaletteItem('Vor','Actions',Icons.arrow_forward,_tabManager.goForward,commandId:NexusCommands.forward),
+    PaletteItem('Reload','Actions',Icons.refresh,_tabManager.reload,commandId:NexusCommands.reload),
+    PaletteItem('Vertikal splitten','Actions',Icons.view_column,_splitVertical,commandId:NexusCommands.splitVertical),
+    PaletteItem('Horizontal splitten','Actions',Icons.view_agenda,_splitHorizontal,commandId:NexusCommands.splitHorizontal),
+    PaletteItem('Terminal-Pane','Actions',Icons.terminal,()=>_paneManager.setKind(PaneKind.terminal),commandId:NexusCommands.terminal),
+    PaletteItem('DevTools-Pane','Actions',Icons.developer_mode,()=>_paneManager.setKind(PaneKind.devtools),commandId:NexusCommands.devtools),
+    PaletteItem('Browser-Pane','Actions',Icons.public,()=>_paneManager.setKind(PaneKind.browser),commandId:NexusCommands.browserPane),
+    PaletteItem('Frameless Mode umschalten','Actions',Icons.fullscreen,()=>setState(()=>_frameless=!_frameless),commandId:NexusCommands.frameless),
+    PaletteItem('Workspace speichern','Actions',Icons.save,_saveWorkspace,commandId:NexusCommands.workspaceSave),
+    ...WorkspaceManager.instance.workspaces.map((w)=>PaletteItem('Workspace: ${w.name}','Actions',Icons.workspaces,()=>_loadWorkspace(w))),
+    ...DevSettings.instance.quickLinks.map((q)=>PaletteItem(q.label,'Bookmarks',Icons.bookmark,(){_tabManager.navigateInput(q.url);} ,hint:q.url)),
+    ..._tabManager.tabs.map((t)=>PaletteItem(t.title,'History',Icons.history,(){_tabManager.navigateInput(t.url);},hint:t.url)),
+    PaletteItem('Auto-Dark für Webseiten: ${ThemeConfig.instance.autoDarkWeb ? 'AN' : 'AUS'}','Settings',Icons.dark_mode,()async{ThemeConfig.instance.autoDarkWeb=!ThemeConfig.instance.autoDarkWeb;await ThemeConfig.instance.save();setState((){});}),
+    PaletteItem('Keybindings / Vim / Emacs / Gaming','Settings',Icons.keyboard, _openKeybindings),
+    PaletteItem('Downloads','Actions',Icons.download_outlined,_openDownloadsPanel,commandId:NexusCommands.downloads),
+    PaletteItem('Mediathek','Actions',Icons.video_library_outlined,()=>Navigator.of(context).push(MaterialPageRoute(builder:(_)=>const MediathekScreen())),commandId:NexusCommands.mediathek),
+    PaletteItem('Adressleiste fokussieren','Actions',Icons.search,()=>_focusAddress(),commandId:NexusCommands.focusAddress),
+  ];
+
+  void _openKeybindings() {
+    showDialog(context: context, builder: (_) => AlertDialog(
+      title: const Text('Keybinding Engine'),
+      content: SizedBox(width: 520, child: ListView(shrinkWrap: true, children: [
+        DropdownButtonFormField<String>(value: KeybindingEngine.instance.mode, decoration: const InputDecoration(labelText:'Profil'), items: const ['Custom','Vim','Emacs','Gaming'].map((m)=>DropdownMenuItem(value:m,child:Text(m))).toList(), onChanged:(m){if(m!=null)KeybindingEngine.instance.applyMode(m);}),
+        const SizedBox(height: 10),
+        ...KeybindingEngine.instance.bindings.entries.map((e)=>ListTile(dense:true,title:Text(e.key,style:const TextStyle(fontSize:12)),trailing:Text(e.value,style:const TextStyle(color:NexusColors.accentPrimary)),onTap:(){final c=TextEditingController(text:e.value);showDialog(context:context,builder:(_)=>AlertDialog(title:Text(e.key),content:TextField(controller:c,autofocus:true,decoration:const InputDecoration(hintText:'z.B. Ctrl+K')),actions:[TextButton(onPressed:()=>Navigator.pop(context),child:const Text('Abbrechen')),FilledButton(onPressed:(){KeybindingEngine.instance.set(e.key,c.text.trim());Navigator.pop(context);},child:const Text('Setzen'))]));})),
+      ])),
+      actions: [TextButton(onPressed:()=>Navigator.pop(context),child:const Text('Schließen'))],
+    ));
+  }
+
+  void _focusAddress(){ setState(()=>_revealChrome=true); WidgetsBinding.instance.addPostFrameCallback((_){_addressFocus.requestFocus();_urlController.selection=TextSelection(baseOffset:0,extentOffset:_urlController.text.length);}); }
+  void _splitVertical(){_paneManager.splitActive(PaneOrientation.vertical,_newTabInSplit());}
+  void _splitHorizontal(){_paneManager.splitActive(PaneOrientation.horizontal,_newTabInSplit());}
+  String? _newTabInSplit(){ final t=_tabManager.addTab(); return t.id; }
+
+  Future<void> _saveWorkspace(){
+    final c=TextEditingController();
+    return showDialog<void>(context:context,builder:(_)=>AlertDialog(title:const Text('Workspace speichern'),content:TextField(controller:c,autofocus:true,decoration:const InputDecoration(hintText:'z.B. Projekt Alpha')),actions:[TextButton(onPressed:()=>Navigator.pop(context),child:const Text('Abbrechen')),FilledButton(onPressed:()async{if(c.text.trim().isNotEmpty){await WorkspaceManager.instance.save(c.text,_tabManager.exportSnapshot(),_paneManager);}if(mounted)Navigator.pop(context);},child:const Text('Speichern'))])).whenComplete(c.dispose);
+  }
+  Future<void> _loadWorkspace(WorkspaceSnapshot w) async { await _tabManager.restoreSnapshot(w.tabs); _paneManager.restore(w.panes); if(mounted)setState((){}); }
+
+  Widget _buildPaneTree(PaneNode node) {
+    if(node.isLeaf){ final pane=node.pane!; final active=pane.id==_paneManager.activePaneId; return GestureDetector(onTap:()=>_activatePane(pane),child:Container(decoration:BoxDecoration(border:Border.all(color:active?NexusColors.accentPrimary:NexusColors.border,width:active?2:1)),child:_buildPaneBody(pane))); }
+    final first=Expanded(flex:(node.ratio*1000).round(),child:_buildPaneTree(node.first!));
+    final second=Expanded(flex:((1-node.ratio)*1000).round(),child:_buildPaneTree(node.second!));
+    final splitter=GestureDetector(onHorizontalDragUpdate:node.orientation==PaneOrientation.vertical?(d){node.ratio=(node.ratio+d.delta.dx/800).clamp(.2,.8);setState((){});}:null,onVerticalDragUpdate:node.orientation==PaneOrientation.horizontal?(d){node.ratio=(node.ratio+d.delta.dy/600).clamp(.2,.8);setState((){});}:null,child:Container(width:node.orientation==PaneOrientation.vertical?5:double.infinity,height:node.orientation==PaneOrientation.horizontal?5:double.infinity,color:NexusColors.accentPrimary));
+    return Flex(direction:node.orientation==PaneOrientation.vertical?Axis.horizontal:Axis.vertical,children:[first,splitter,second]);
+  }
+
+  Widget _buildPaneBody(PaneState pane){
+    final tab=_tabForPane(pane);
+    switch(pane.kind){
+      case PaneKind.terminal: return TerminalPane(initialText:pane.terminalText,onTextChanged:_paneManager.setTerminalText);
+      case PaneKind.devtools: return tab==null?const Center(child:Text('Kein Tab in diesem Pane')):DevToolsScreen(tab:tab);
+      case PaneKind.browser:
+        if(tab==null)return Center(child:TextButton.icon(onPressed:_newTabInPane,icon:const Icon(Icons.add),label:const Text('Tab öffnen')));
+        return Column(children:[_buildPaneTabStrip(pane),Expanded(child:_buildContent(tab))]);
+    }
+  }
+
+  Widget _buildPaneTabStrip(PaneState pane){return SizedBox(height:38,child:Row(children:[Expanded(child:ListView(scrollDirection:Axis.horizontal,padding:const EdgeInsets.symmetric(horizontal:6,vertical:4),children:pane.tabIds.map((id){NexusTab? t; for (final candidate in _tabManager.tabs) { if (candidate.id == id) { t = candidate; break; } }if(t==null)return const SizedBox.shrink();final a=id==pane.activeTabId;return GestureDetector(onTap:(){pane.activeTabId=id;_tabManager.switchTab(id);_activatePane(pane);},child:Container(margin:const EdgeInsets.only(right:6),padding:const EdgeInsets.symmetric(horizontal:10),decoration:BoxDecoration(color:a?NexusColors.accentPrimarySoft:NexusColors.bgSurface,borderRadius:BorderRadius.circular(12),border:Border.all(color:a?NexusColors.accentPrimary:NexusColors.border)),alignment:Alignment.center,child:Row(children:[Text(t.isHome?'Neuer Tab':t.title,maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(fontSize:11)),const SizedBox(width:5),GestureDetector(onTap:(){_tabManager.closeTab(id);pane.tabIds.remove(id);pane.activeTabId=pane.tabIds.isEmpty?null:pane.tabIds.last;setState((){});},child:const Icon(Icons.close,size:13))]))}).toList())),IconButton(onPressed:(){final t=_tabManager.addTab();pane.tabIds.add(t.id);pane.activeTabId=t.id;_activatePane(pane);},icon:const Icon(Icons.add,size:18,color:NexusColors.accentPrimary)),IconButton(tooltip:'Vertikal split',onPressed:_splitVertical,icon:const Icon(Icons.view_column,size:17)),IconButton(tooltip:'Horizontal split',onPressed:_splitHorizontal,icon:const Icon(Icons.view_agenda,size:17)),IconButton(tooltip:'Terminal',onPressed:()=>_paneManager.setKind(PaneKind.terminal),icon:const Icon(Icons.terminal,size:17)),IconButton(tooltip:'DevTools',onPressed:()=>_paneManager.setKind(PaneKind.devtools),icon:const Icon(Icons.developer_mode,size:17))]));}
+
+  Widget _buildFramelessContent(NexusTab? tab){ return Stack(children:[Positioned.fill(child:_buildPaneTree(_paneManager.root)),if(_frameless&&!_revealChrome)const Positioned(top:0,left:0,right:0,height:12,child:MouseRegion(cursor:SystemMouseCursors.basic,child:SizedBox()))]); }
+
   Widget _buildAddressBar(NexusTab? tab) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -589,6 +734,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
             Expanded(
               child: TextField(
                 controller: _urlController,
+                focusNode: _addressFocus,
                 style: const TextStyle(color: NexusColors.textPrimary),
                 textInputAction: TextInputAction.go,
                 onSubmitted: (value) => _tabManager.navigateInput(value),

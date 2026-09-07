@@ -1,0 +1,21 @@
+{
+  "colors": {
+    "bgBase": "#FF1E1E1E",
+    "bgSurface": "#FF2E3033",
+    "bgRaised": "#FF3A3D40",
+    "accent": "#FFFFB800",
+    "success": "#FF00FF66",
+    "danger": "#FFFF3B3B",
+    "text": "#FFFFFFFF",
+    "muted": "#FFA0A0A0",
+    "border": "#FF3F4245"
+  },
+  "radius": 18,
+  "spacing": 4,
+  "fonts": {
+    "display": "Chakra Petch",
+    "ui": "Inter",
+    "mono": "JetBrains Mono"
+  },
+  "autoDarkWeb": true
+}

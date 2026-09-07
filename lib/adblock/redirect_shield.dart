@@ -4,6 +4,7 @@ import '../engines/network_sniffer.dart';
 import '../models/block_event.dart';
 import '../models/tab_model.dart';
 import '../state/dev_settings.dart';
+import '../state/theme_config.dart';
 import 'blocklist.dart';
 
 /// Navigations-Ebene-Schutz für einen Tab: blockt (a) Navigationen zu
@@ -55,6 +56,12 @@ class RedirectShield {
         tab.controller.runJavaScript(NetworkSniffer.injectionScript);
       },
       onPageFinished: (url) {
+        // Re-install after the document exists. This closes the small race
+        // between navigation start and the page's earliest player scripts.
+        tab.controller.runJavaScript(NetworkSniffer.injectionScript);
+        if (ThemeConfig.instance.autoDarkWeb) {
+          tab.controller.runJavaScript(ThemeConfig.darkModeScript);
+        }
         tab.isLoading = false;
         onLoadingChange(false);
         tab.controller.getTitle().then((title) {
