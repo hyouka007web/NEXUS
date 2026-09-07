@@ -221,7 +221,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
           'JSON.stringify(window.__nexusMedia || [])',
         );
         for (final v in VideoHarvesterEngine.classifyCaptures(
-          NetworkSniffer.parseCaptures(raw),
+          NetworkSniffer.parseCaptures(raw!),
           tab.title,
         )) {
           merged[v.url] = v;
@@ -879,7 +879,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
       );
     }
     return RepaintBoundary(
-      child: WebViewWidget(controller: _tabManager.activeTab?.controller),
+      child: _tabManager.activeTab?.controller != null ? WebViewWidget(controller: _tabManager.activeTab!.controller) : const SizedBox.shrink(),
     );
   }
 

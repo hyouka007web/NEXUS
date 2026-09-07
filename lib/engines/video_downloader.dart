@@ -65,7 +65,7 @@ class VideoDownloader {
     String pageTitle, {
     String? referer,
     void Function(DownloadProgress)? onProgress,
-    Map<String, String> headers = const <String, String>{},
+    Map<String, String>? headers,
   }) async {
     if (!mediaUrl.startsWith('http://') && !mediaUrl.startsWith('https://')) {
       throw ArgumentError('mediaUrl muss http(s) sein: $mediaUrl');
@@ -91,7 +91,7 @@ class VideoDownloader {
     String pageTitle,
     String? referer,
     void Function(DownloadProgress)? onProgress,
-    Map<String, String> headers = const <String, String>{},
+    Map<String, String>? headers,
   ) async {
     final id = _randomId();
     final ext = _guessExtension(mediaUrl, null);
@@ -191,7 +191,7 @@ class VideoDownloader {
     String url,
     String? referer,
     int? rangeFrom,
-    Map<String, String> headers = const <String, String>{},
+    Map<String, String>? headers,
   ) async {
     final request = await client.getUrl(Uri.parse(url));
     request.headers.set(HttpHeaders.userAgentHeader, headers['User-Agent'] ?? _userAgent);
@@ -227,7 +227,7 @@ class VideoDownloader {
     String pageTitle,
     String? referer,
     void Function(DownloadProgress)? onProgress,
-    Map<String, String> headers = const <String, String>{},
+    Map<String, String>? headers,
   ) async {
     final master = await _fetchText(mediaUrl, referer, headers);
     final playlist = await _chooseVariant(master, mediaUrl, referer, headers);
@@ -290,7 +290,7 @@ class VideoDownloader {
     String master,
     String base,
     String? referer,
-    Map<String, String> headers = const <String, String>{},
+    Map<String, String>? headers,
   ) async {
     final lines =
         master.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
