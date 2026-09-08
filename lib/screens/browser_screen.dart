@@ -423,24 +423,48 @@ class _BrowserScreenState extends State<BrowserScreen> {
     }
   }
 
+  /// Zentrale Zuordnung Command-ID → tatsächlicher Callback. Sowohl die
+  /// Command Palette als auch die Tastenkürzel-Ebene greifen auf dieselbe
+  /// Map zu, damit ein Befehl nur an einer Stelle gepflegt werden muss.
+  Map<String, VoidCallback> _commandCallbacks() => {
+        NexusCommands.palette: _openCommandPalette,
+        NexusCommands.focusAddress: _focusAddress,
+        NexusCommands.newTab: _newTabInPane,
+        NexusCommands.closeTab: _closeActivePaneTab,
+        NexusCommands.back: _tabManager.goBack,
+        NexusCommands.forward: _tabManager.goForward,
+        NexusCommands.reload: _tabManager.reload,
+        NexusCommands.harvest: _runHarvester,
+        NexusCommands.splitVertical: _splitVertical,
+        NexusCommands.splitHorizontal: _splitHorizontal,
+        NexusCommands.terminal: () => _paneManager.setKind(PaneKind.terminal),
+        NexusCommands.devtools: () => _paneManager.setKind(PaneKind.devtools),
+        NexusCommands.browserPane: () => _paneManager.setKind(PaneKind.browser),
+        NexusCommands.frameless: () => setState(() => _frameless = !_frameless),
+        NexusCommands.workspaceSave: _saveWorkspace,
+      };
+
+  Map<ShortcutActivator, VoidCallback> _buildShortcuts() {
+    final callbacks = _commandCallbacks();
+    final out = <ShortcutActivator, VoidCallback>{};
+    for (final entry in KeybindingEngine.instance.bindings.entries) {
+      final callback = callbacks[entry.key];
+      final activator = parseShortcut(entry.value);
+      if (callback != null && activator != null) {
+        out[activator] = callback;
+      }
+    }
+    return out;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_restoring) return const Scaffold(backgroundColor: NexusColors.bgBase, body: Center(child: CircularProgressIndicator()));
     final tab = _tabForPane(_paneManager.activePane);
-    return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.keyK, control: true): _openCommandPalette,
-        const SingleActivator(LogicalKeyboardKey.keyL, control: true): _focusAddress,
-        const SingleActivator(LogicalKeyboardKey.keyT, control: true): _newTabInPane,
-        const SingleActivator(LogicalKeyboardKey.keyW, control: true): _closeActivePaneTab,
-        const SingleActivator(LogicalKeyboardKey.keyR, control: true): _tabManager.reload,
-        const SingleActivator(LogicalKeyboardKey.keyF, control: true, shift: true): ()=>setState(()=>_frameless=!_frameless),
-        const SingleActivator(LogicalKeyboardKey.keyM, control: true, shift: true): _runHarvester,
-        const SingleActivator(LogicalKeyboardKey.keyV, control: true, alt: true): _splitVertical,
-        const SingleActivator(LogicalKeyboardKey.keyH, control: true, alt: true): _splitHorizontal,
-        const SingleActivator(LogicalKeyboardKey.keyT, control: true, alt: true): ()=>_paneManager.setKind(PaneKind.terminal),
-        const SingleActivator(LogicalKeyboardKey.keyI, control: true, shift: true): ()=>_paneManager.setKind(PaneKind.devtools),
-      },
+    return ListenableBuilder(
+      listenable: KeybindingEngine.instance,
+      builder: (context, _) => CallbackShortcuts(
+      bindings: _buildShortcuts(),
       child: Focus(autofocus:true,child:Scaffold(backgroundColor:NexusColors.bgBase,body:SafeArea(
         child: _frameless
           ? Stack(children:[
@@ -459,6 +483,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
               if(_notification!=null) _buildBottomNotification(),
             ]),
       )))
+    ),
     );
   }
 
