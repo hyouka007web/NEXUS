@@ -208,6 +208,46 @@ class NetworkSniffer {
 })();
 ''';
 
+  /// Snapshot der für die Video-Erkennung relevanten Tags — nur
+  /// `<video>`, `<iframe>` und `<script>`-Blöcke, deren Inhalt nach einem
+  /// Player aussieht ("player"/"video"/"hls"/"m3u8" im Text). Für die
+  /// Fehlersuche: zeigt genau, was der Harvester im DOM tatsächlich vorfindet,
+  /// ohne die komplette (oft riesige) Seite zu dumpen.
+  static const String domSnapshotScript = r'''
+(function(){
+  function attrs(el){
+    var out={};
+    for (var i=0;i<el.attributes.length;i++){ var a=el.attributes[i]; out[a.name]=a.value; }
+    return out;
+  }
+  var result=[];
+  document.querySelectorAll('video').forEach(function(el){
+    result.push({tag:'video', attrs:attrs(el), currentSrc: el.currentSrc||''});
+  });
+  document.querySelectorAll('iframe').forEach(function(el){
+    result.push({tag:'iframe', attrs:attrs(el)});
+  });
+  document.querySelectorAll('script').forEach(function(el){
+    var t = el.textContent || '';
+    if (/player|video|hls|m3u8|\.mpd/i.test(t)) {
+      result.push({tag:'script', src: el.src||'', preview: t.substring(0,300)});
+    }
+  });
+  return JSON.stringify(result);
+})();
+''';
+
+  static List<Map<String, dynamic>> parseDomSnapshot(Object raw) {
+    try {
+      dynamic decoded = jsonDecode(raw.toString());
+      if (decoded is String) decoded = jsonDecode(decoded);
+      if (decoded is List) {
+        return decoded.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+      }
+    } catch (_) {}
+    return const [];
+  }
+
   static List<MediaCapture> parseCaptures(Object raw) {
     try {
       dynamic decoded = jsonDecode(raw.toString());

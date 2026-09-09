@@ -14,6 +14,7 @@ class NexusCommands {
   static const splitHorizontal='pane.splitHorizontal';
   static const terminal='pane.terminal';
   static const devtools='pane.devtools';
+  static const harvesterDebug='pane.harvesterDebug';
   static const browserPane='pane.browser';
   static const frameless='browser.frameless';
   static const workspaceSave='workspace.save';

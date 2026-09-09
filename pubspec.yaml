@@ -6,7 +6,11 @@ description: >
   (fetch/XHR-Hooking per JS-Injection, findet auch Video-URLs, die nie ins
   DOM geschrieben werden), Mediathek, Downloads-Panel (nicht-blockierend
   über die Kommandozentrale erreichbar) und DevTools (Sniffer-Log,
-  User-Agent-Switcher, Cookie-Manager, nutzereigene Domain-Skripte).
+  User-Agent-Switcher, Cookie-Manager, nutzereigene Domain-Skripte),
+  Harvester-Debug-Pane (Live-Log pro Erkennungsschritt, DOM-Snapshot) und
+  einen Testfälle-Screen mit 5 öffentlichen Referenzseiten (YouTube, Vimeo,
+  einfache HTML5-Video-Seite, HLS-Demo, DASH-Demo) zum gezielten
+  Nachvollziehen von Erkennungsproblemen.
   Windows/Linux: einfachere Vorstufe bis sie ihr eigenes, zur jeweiligen
   WebView-API passendes Äquivalent bekommen. Scraper/Video-
   Harvester/Downloader sind reines Dart ohne Plattform-Channel und laufen

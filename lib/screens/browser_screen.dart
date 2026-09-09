@@ -1,10 +1,12 @@
 import "package:flutter/services.dart";
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import '../engines/harvest_logger.dart';
 import '../engines/network_sniffer.dart';
 import '../engines/scraper_engine.dart';
 import '../engines/video_downloader.dart';
@@ -28,6 +30,8 @@ import '../ui/command_palette.dart';
 import '../ui/terminal_pane.dart';
 import '../theme/nexus_theme.dart';
 import 'devtools_screen.dart';
+import 'harvest_debug_panel.dart';
+import 'harvest_test_cases_screen.dart';
 import 'downloads_panel.dart';
 import 'mediathek_screen.dart';
 import 'start_page.dart';
@@ -202,6 +206,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
       _showNotification('Erst eine Seite öffnen');
       return;
     }
+    HarvestLogger.instance.start(tab.url);
     _showNotification(
       'Durchsuche Seite… (Tipp: Video vorher kurz anspielen, findet mehr)',
       duration: const Duration(seconds: 30),
@@ -209,27 +214,53 @@ class _BrowserScreenState extends State<BrowserScreen> {
     try {
       final merged = <String, HarvestedVideo>{};
 
+      // Diagnose-Schritt (nicht Teil der eigentlichen Erkennung): rohes
+      // HTML separat holen, um <video>-Tags VOR JS-Ausführung zu zählen —
+      // zeigt im Debug-Log direkt, ob eine Seite ihre Player erst per JS
+      // nachlädt (dann ist die Rendering-Zahl unten deutlich höher).
+      unawaited(VideoHarvesterEngine.fetchHtmlForDebug(tab.url).then((raw) {
+        if (raw == null) {
+          HarvestLogger.instance.log('raw-html', 'Roh-HTML nicht abrufbar (Fetch fehlgeschlagen)',
+              level: HarvestLogLevel.warning);
+          return;
+        }
+        final videoTags = RegExp(r'<video\b', caseSensitive: false).allMatches(raw).length;
+        final iframeTagsRaw = RegExp(r'<iframe\b', caseSensitive: false).allMatches(raw).length;
+        HarvestLogger.instance.log(
+          'raw-html',
+          '${raw.length} Bytes, $videoTags <video>-Tag(s), $iframeTagsRaw <iframe>-Tag(s) im rohen HTML',
+          data: {'bytes': raw.length, 'videoTags': videoTags, 'iframeTags': iframeTagsRaw},
+        );
+      }));
+
       // Ebene 1: Netzwerk-Sniffer — liest zurück, welche URLs die Seite
       // selbst per fetch()/XHR angefragt hat (Skript läuft seit
       // onPageStarted mit, siehe redirect_shield.dart). Das ist die
       // einzige Ebene, die auch Player findet, die ihre Stream-URL NIE ins
       // DOM schreiben, sondern nur intern an MediaSource/<video> weiterreichen.
       try {
+        HarvestLogger.instance.log('sniffer', 'Injiziere Netzwerk-Sniffer + Discovery-Skript…');
         await _tabManager.activeTab?.controller.runJavaScript(NetworkSniffer.injectionScript);
         await _tabManager.activeTab?.controller.runJavaScript(NetworkSniffer.discoveryScript);
         await Future<void>.delayed(const Duration(seconds: 8));
         final raw = await _tabManager.activeTab?.controller.runJavaScriptReturningResult(
           'JSON.stringify(window.__nexusMedia || [])',
         );
-        for (final v in VideoHarvesterEngine.classifyCaptures(
-          NetworkSniffer.parseCaptures(raw!),
-          tab.title,
-        )) {
+        final captures = NetworkSniffer.parseCaptures(raw!);
+        final bySource = <String, int>{};
+        for (final c in captures) {
+          bySource[c.source] = (bySource[c.source] ?? 0) + 1;
+        }
+        HarvestLogger.instance.log(
+          'sniffer',
+          '${captures.length} Netzwerk-Treffer (${bySource.entries.map((e) => '${e.key}: ${e.value}').join(', ')})',
+          data: {'count': captures.length, 'bySource': bySource},
+        );
+        for (final v in VideoHarvesterEngine.classifyCaptures(captures, tab.title)) {
           merged[v.url] = v;
         }
-      } catch (_) {
-        // Sniffer nicht verfügbar (z.B. CSP blockt eval) — weiter mit den
-        // übrigen Ebenen.
+      } catch (e) {
+        HarvestLogger.instance.log('sniffer', 'Sniffer fehlgeschlagen: $e', level: HarvestLogLevel.error);
       }
 
       // Ebene 2: das tatsächlich gerenderte DOM der offenen WebView —
@@ -245,6 +276,9 @@ class _BrowserScreenState extends State<BrowserScreen> {
         } catch (_) {
           renderedHtml = raw.toString();
         }
+        final videoTagsRendered = RegExp(r'<video\b', caseSensitive: false).allMatches(renderedHtml).length;
+        final iframeTagsRendered = RegExp(r'<iframe\b', caseSensitive: false).allMatches(renderedHtml).length;
+        final beforeCount = merged.length;
         for (final v in VideoHarvesterEngine.extractFromRenderedHtml(
           renderedHtml,
           tab.url,
@@ -252,35 +286,76 @@ class _BrowserScreenState extends State<BrowserScreen> {
         )) {
           merged.putIfAbsent(v.url, () => v);
         }
-      } catch (_) {
-        // JS-Auswertung kann z.B. bei restriktiver Content-Security-Policy
-        // fehlschlagen — dann bleiben wenigstens die anderen Ebenen.
+        HarvestLogger.instance.log(
+          'dom-render',
+          '${renderedHtml.length} Bytes gerendert, $videoTagsRendered <video>-Tag(s), '
+              '$iframeTagsRendered <iframe>-Tag(s), ${merged.length - beforeCount} neue Treffer',
+          data: {
+            'bytes': renderedHtml.length,
+            'videoTags': videoTagsRendered,
+            'iframeTags': iframeTagsRendered,
+            'newHits': merged.length - beforeCount,
+          },
+        );
+
+        // DOM-Snapshot: nur die für die Erkennung relevanten Tags,
+        // fürs Debug-Panel zum Nachschauen, was tatsächlich im DOM stand.
+        final snapshotRaw = await _tabManager.activeTab?.controller
+            .runJavaScriptReturningResult(NetworkSniffer.domSnapshotScript);
+        if (snapshotRaw != null) {
+          HarvestLogger.instance.setDomSnapshot(NetworkSniffer.parseDomSnapshot(snapshotRaw));
+        }
+      } catch (e) {
+        HarvestLogger.instance.log('dom-render', 'DOM-Auswertung fehlgeschlagen: $e', level: HarvestLogLevel.error);
       }
 
       // Ebene 3: der bisherige Netzwerk-Crawl — findet Treffer auf
       // verlinkten Seiten (Embeds, weiterführende Player-Seiten), die im
-      // aktuell offenen Tab selbst gar nicht sichtbar sind.
-      for (final v in await compute(_harvestIsolate, tab.url)) {
+      // aktuell offenen Tab selbst gar nicht sichtbar sind. Läuft über
+      // compute() in einem eigenen Isolate (Performance-Isolation, siehe
+      // Kommentar bei _harvestIsolate) — deshalb hier nur eine
+      // Zusammenfassung NACH Abschluss, kein Live-Fortschritt pro Seite.
+      HarvestLogger.instance.log('crawl', 'Durchsuche verlinkte Seiten (eigener Isolate)…');
+      final beforeCrawl = merged.length;
+      final crawlResults = await compute(_harvestIsolate, tab.url);
+      for (final v in crawlResults) {
         merged.putIfAbsent(v.url, () => v);
       }
+      HarvestLogger.instance.log(
+        'crawl',
+        '${crawlResults.length} Treffer aus verlinkten Seiten, '
+            '${merged.length - beforeCrawl} davon neu',
+        data: {'crawlHits': crawlResults.length, 'newHits': merged.length - beforeCrawl},
+      );
 
       // Manifest pass: inspect the first bounded set of HLS/DASH candidates
       // and attach quality variants without blocking the UI isolate.
       final keys = merged.keys.toList();
+      var enriched = 0;
       for (final key in keys.take(24)) {
         final current = merged[key];
         if (current == null || (current.type != 'M3U8' && current.type != 'DASH')) continue;
         merged[key] = await VideoHarvesterEngine.enrichManifest(current);
+        enriched++;
+      }
+      if (enriched > 0) {
+        HarvestLogger.instance.log('manifest', '$enriched M3U8/DASH-Manifest(e) auf Qualitätsstufen geprüft');
       }
 
       if (!mounted) return;
       if (merged.isEmpty) {
+        HarvestLogger.instance.log('ergebnis', 'Keine Videos gefunden', level: HarvestLogLevel.warning);
+        HarvestLogger.instance.finish(success: false);
         _showNotification('Keine Videos gefunden');
         return;
       }
+      HarvestLogger.instance.log('ergebnis', '${merged.length} Video(s) insgesamt gefunden');
+      HarvestLogger.instance.finish(success: true);
       setState(() => _notification = null);
       _showHarvesterSheet(merged.values.toList(), referer: tab.url);
     } catch (e) {
+      HarvestLogger.instance.log('fehler', '$e', level: HarvestLogLevel.error);
+      HarvestLogger.instance.finish(success: false);
       _showNotification('Video Harvester fehlgeschlagen: $e');
     }
   }
@@ -508,6 +583,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
         NexusCommands.splitHorizontal: _splitHorizontal,
         NexusCommands.terminal: () => _paneManager.setKind(PaneKind.terminal),
         NexusCommands.devtools: () => _paneManager.setKind(PaneKind.devtools),
+        NexusCommands.harvesterDebug: () => _paneManager.setKind(PaneKind.harvesterDebug),
         NexusCommands.browserPane: () => _paneManager.setKind(PaneKind.browser),
         NexusCommands.frameless: () => setState(() => _frameless = !_frameless),
         NexusCommands.workspaceSave: _saveWorkspace,
@@ -754,6 +830,8 @@ class _BrowserScreenState extends State<BrowserScreen> {
     PaletteItem('Horizontal splitten','Actions',Icons.view_agenda,_splitHorizontal,commandId:NexusCommands.splitHorizontal),
     PaletteItem('Terminal-Pane','Actions',Icons.terminal,()=>_paneManager.setKind(PaneKind.terminal),commandId:NexusCommands.terminal),
     PaletteItem('DevTools-Pane','Actions',Icons.developer_mode,()=>_paneManager.setKind(PaneKind.devtools),commandId:NexusCommands.devtools),
+    PaletteItem('Harvester-Debug-Pane','Actions',Icons.bug_report,()=>_paneManager.setKind(PaneKind.harvesterDebug),commandId:NexusCommands.harvesterDebug),
+    PaletteItem('Harvester-Testfälle','Actions',Icons.science,()=>Navigator.of(context).push(MaterialPageRoute(builder:(_)=>const HarvestTestCasesScreen()))),
     PaletteItem('Browser-Pane','Actions',Icons.public,()=>_paneManager.setKind(PaneKind.browser),commandId:NexusCommands.browserPane),
     PaletteItem('Frameless Mode umschalten','Actions',Icons.fullscreen,()=>setState(()=>_frameless=!_frameless),commandId:NexusCommands.frameless),
     PaletteItem('Workspace speichern','Actions',Icons.save,_saveWorkspace,commandId:NexusCommands.workspaceSave),
@@ -803,6 +881,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
     switch(pane.kind){
       case PaneKind.terminal: return TerminalPane(initialText:pane.terminalText,onTextChanged:_paneManager.setTerminalText);
       case PaneKind.devtools: return tab==null?const Center(child:Text('Kein Tab in diesem Pane')):DevToolsScreen(tab:tab);
+      case PaneKind.harvesterDebug: return const HarvestDebugPanel();
       case PaneKind.browser:
         if(tab==null)return Center(child:TextButton.icon(onPressed:_newTabInPane,icon:const Icon(Icons.add),label:const Text('Tab öffnen')));
         return Column(children:[_buildPaneTabStrip(pane),Expanded(child:_buildContent(tab))]);

@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 enum PaneOrientation { horizontal, vertical }
-enum PaneKind { browser, terminal, devtools }
+enum PaneKind { browser, terminal, devtools, harvesterDebug }
 
 class PaneState {
   PaneState({required this.id, List<String>? tabIds, this.activeTabId, this.kind = PaneKind.browser, this.terminalText = ''}) : tabIds = List<String>.from(tabIds ?? const []);

@@ -198,6 +198,8 @@ class VideoHarvesterEngine {
     );
   }
 
+  static Future<String?> fetchHtmlForDebug(String url) => _fetchHtml(url);
+
   static Future<String?> _fetchHtml(String url) async {
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 12)
