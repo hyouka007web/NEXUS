@@ -15,6 +15,7 @@ import '../models/harvested_video.dart';
 import '../models/quick_link.dart';
 import '../models/scrape_result.dart';
 import '../models/tab_model.dart';
+import '../state/batch_download_manager.dart';
 import '../state/dev_settings.dart';
 import '../state/download_repository.dart';
 import '../state/tab_manager.dart';
@@ -286,6 +287,9 @@ class _BrowserScreenState extends State<BrowserScreen> {
 
   void _showHarvesterSheet(List<HarvestedVideo> results, {required String referer}) {
     String query = '';
+    String excludeDomain = '';
+    final activeTypes = <String>{'MP4', 'WEBM', 'M3U8', 'MEDIA'};
+    final selected = <String>{};
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -295,41 +299,94 @@ class _BrowserScreenState extends State<BrowserScreen> {
       ),
       builder: (context) => StatefulBuilder(
         builder: (context, setSheetState) {
-          final filtered = query.trim().isEmpty
-              ? results
-              : results.where((v) {
-                  final q = query.toLowerCase();
-                  return v.title.toLowerCase().contains(q) ||
-                      v.host.toLowerCase().contains(q) ||
-                      v.url.toLowerCase().contains(q);
-                }).toList();
+          final filtered = results.where((v) {
+            if (!activeTypes.contains(v.type)) return false;
+            if (excludeDomain.trim().isNotEmpty &&
+                v.host.toLowerCase().contains(excludeDomain.trim().toLowerCase())) {
+              return false;
+            }
+            if (query.trim().isEmpty) return true;
+            final q = query.toLowerCase();
+            return v.title.toLowerCase().contains(q) ||
+                v.host.toLowerCase().contains(q) ||
+                v.url.toLowerCase().contains(q);
+          }).toList();
+          const downloadable = {'MP4', 'WEBM', 'M3U8', 'MEDIA'};
+
           return DraggableScrollableSheet(
-            initialChildSize: 0.6,
+            initialChildSize: 0.7,
             expand: false,
             builder: (context, scrollController) => Padding(
               padding: const EdgeInsets.all(12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('${results.length} Treffer',
-                      style: Theme.of(context).textTheme.titleMedium),
+                  Row(
+                    children: [
+                      Text('${results.length} Treffer',
+                          style: Theme.of(context).textTheme.titleMedium),
+                      const Spacer(),
+                      if (selected.isNotEmpty)
+                        FilledButton.icon(
+                          icon: const Icon(Icons.download, size: 18),
+                          label: Text('${selected.length} herunterladen'),
+                          onPressed: () {
+                            final chosen = results.where((v) => selected.contains(v.url)).toList();
+                            BatchDownloadManager.instance.enqueueAll(chosen, referer);
+                            Navigator.pop(context);
+                            _showNotification('${chosen.length} Videos in die Warteschlange gestellt');
+                            _openDownloadsPanel();
+                          },
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  // Typ-Filter: reine UI-Filterung auf dem bereits
+                  // vorliegenden Ergebnis dieses einen Harvest-Laufs.
+                  Wrap(
+                    spacing: 6,
+                    children: downloadable.map((type) {
+                      final active = activeTypes.contains(type);
+                      return FilterChip(
+                        label: Text(type, style: const TextStyle(fontSize: 11)),
+                        selected: active,
+                        onSelected: (v) => setSheetState(
+                            () => v ? activeTypes.add(type) : activeTypes.remove(type)),
+                        selectedColor: NexusColors.accentPrimarySoft,
+                        backgroundColor: NexusColors.bgPill,
+                      );
+                    }).toList(),
+                  ),
                   const SizedBox(height: 8),
                   TextField(
                     style: const TextStyle(color: NexusColors.textPrimary),
-                    onChanged: (value) =>
-                        setSheetState(() => query = value),
+                    onChanged: (value) => setSheetState(() => query = value),
                     decoration: InputDecoration(
                       isDense: true,
                       hintText: 'Filtern, z.B. nach Titel…',
-                      hintStyle:
-                          const TextStyle(color: NexusColors.textMuted),
-                      prefixIcon: const Icon(Icons.search,
-                          size: 20, color: NexusColors.textMuted),
+                      hintStyle: const TextStyle(color: NexusColors.textMuted),
+                      prefixIcon: const Icon(Icons.search, size: 20, color: NexusColors.textMuted),
                       filled: true,
                       fillColor: NexusColors.bgPill,
                       border: OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(NexusRadii.button),
+                        borderRadius: BorderRadius.circular(NexusRadii.button),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    style: const TextStyle(color: NexusColors.textPrimary, fontSize: 12),
+                    onChanged: (value) => setSheetState(() => excludeDomain = value),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      hintText: 'Domain ausschließen (optional)',
+                      hintStyle: const TextStyle(color: NexusColors.textMuted, fontSize: 12),
+                      prefixIcon: const Icon(Icons.block, size: 18, color: NexusColors.textMuted),
+                      filled: true,
+                      fillColor: NexusColors.bgPill,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(NexusRadii.button),
                         borderSide: BorderSide.none,
                       ),
                     ),
@@ -347,10 +404,22 @@ class _BrowserScreenState extends State<BrowserScreen> {
                       itemCount: filtered.length,
                       itemBuilder: (context, i) {
                         final v = filtered[i];
-                        const downloadable = {'MP4', 'WEBM', 'M3U8', 'MEDIA'};
                         final canDownload = downloadable.contains(v.type);
                         final quality = v.quality.isEmpty ? '' : ' · ${v.quality}';
                         return ListTile(
+                          leading: canDownload
+                              ? Checkbox(
+                                  value: selected.contains(v.url),
+                                  activeColor: NexusColors.accentPrimary,
+                                  onChanged: (checked) => setSheetState(() {
+                                    if (checked == true) {
+                                      selected.add(v.url);
+                                    } else {
+                                      selected.remove(v.url);
+                                    }
+                                  }),
+                                )
+                              : const SizedBox(width: 24),
                           title: Text(v.title.isEmpty ? v.host : v.title,
                               maxLines: 1, overflow: TextOverflow.ellipsis),
                           subtitle: Text(

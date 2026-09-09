@@ -1,10 +1,27 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 
 import 'package:path_provider/path_provider.dart';
 
 import '../models/video_entry.dart';
+
+/// Erlaubt es, einen laufenden Download von außen abzubrechen (für die
+/// Batch-Download-Warteschlange: "Pausieren" bricht den aktuellen Request
+/// sauber ab, der bereits geschriebene `.part`-Anteil bleibt liegen und
+/// wird beim nächsten Aufruf über den ohnehin vorhandenen Range-Resume
+/// fortgesetzt — kein separater Pause/Resume-Mechanismus nötig, das ist
+/// derselbe Weg wie bei einem echten Netzwerkabbruch.
+class CancelToken {
+  bool _cancelled = false;
+  bool get isCancelled => _cancelled;
+  void cancel() => _cancelled = true;
+}
+
+class DownloadCancelledException implements Exception {
+  @override
+  String toString() => 'Download pausiert';
+}
 
 /// Live-Fortschritt während eines laufenden Downloads. [total] ist -1, wenn
 /// die Gegenstelle keine Content-Length liefert (z.B. bei manchen
@@ -101,6 +118,7 @@ class VideoDownloader {
     String? referer,
     Map<String, String> headers = const {},
     void Function(DownloadProgress)? onProgress,
+    CancelToken? cancelToken,
   }) async {
     if (!mediaUrl.startsWith('http://') && !mediaUrl.startsWith('https://')) {
       throw ArgumentError('mediaUrl muss http(s) sein: $mediaUrl');
@@ -115,8 +133,8 @@ class VideoDownloader {
       );
     }
     return _looksLikeHls(mediaUrl)
-        ? _downloadHls(mediaUrl, pageTitle, referer, headers, onProgress)
-        : _downloadDirect(mediaUrl, pageTitle, referer, headers, onProgress);
+        ? _downloadHls(mediaUrl, pageTitle, referer, headers, onProgress, cancelToken)
+        : _downloadDirect(mediaUrl, pageTitle, referer, headers, onProgress, cancelToken);
   }
 
   static Future<VideoEntry> _downloadDirect(
@@ -125,8 +143,15 @@ class VideoDownloader {
     String? referer,
     Map<String, String> headers,
     void Function(DownloadProgress)? onProgress,
+    CancelToken? cancelToken,
   ) async {
-    final id = _randomId();
+    // Deterministisch statt zufällig: derselbe mediaUrl+Titel ergibt
+    // denselben Ziel-/.part-Dateinamen. Nur dadurch findet ein späterer
+    // "Fortsetzen"-Aufruf (neue Batch-Download-Warteschlange, siehe unten)
+    // dieselbe, bereits teilweise geschriebene .part-Datei wieder — mit
+    // einer zufälligen ID pro Aufruf (vorherige Fassung) wäre jeder erneute
+    // Versuch bei 0 gestartet, selbst wenn schon Bytes vorlagen.
+    final id = _deterministicId(mediaUrl, pageTitle);
     final ext = _guessExtension(mediaUrl);
     final dir = await downloadsDir();
     final baseName = _sanitize(pageTitle)
@@ -153,7 +178,7 @@ class VideoDownloader {
         await response.drain<void>();
         existing = 0;
         if (await part.exists()) await part.delete();
-        return _downloadDirect(mediaUrl, pageTitle, referer, headers, onProgress);
+        return _downloadDirect(mediaUrl, pageTitle, referer, headers, onProgress, cancelToken);
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
         await response.drain<void>();
@@ -184,15 +209,33 @@ class VideoDownloader {
 
       final sink = part.openWrite(mode: append ? FileMode.append : FileMode.write);
       int done = existing;
+      StreamSubscription<List<int>>? sub;
       try {
-        await for (final chunk in response) {
-          sink.add(chunk);
-          done += chunk.length;
-          final percent = total > 0 ? ((done * 100) ~/ total).clamp(0, 100) : -1;
-          onProgress?.call(DownloadProgress(bytes: done, total: total, percent: percent));
-        }
+        final completer = Completer<void>();
+        sub = response.listen(
+          (chunk) {
+            if (cancelToken?.isCancelled == true) {
+              sub?.pause();
+              if (!completer.isCompleted) completer.completeError(DownloadCancelledException());
+              return;
+            }
+            sink.add(chunk);
+            done += chunk.length;
+            final percent = total > 0 ? ((done * 100) ~/ total).clamp(0, 100) : -1;
+            onProgress?.call(DownloadProgress(bytes: done, total: total, percent: percent));
+          },
+          onDone: () {
+            if (!completer.isCompleted) completer.complete();
+          },
+          onError: (Object e) {
+            if (!completer.isCompleted) completer.completeError(e);
+          },
+          cancelOnError: true,
+        );
+        await completer.future;
         await sink.flush();
       } finally {
+        await sub?.cancel();
         await sink.close();
       }
 
@@ -200,6 +243,11 @@ class VideoDownloader {
       final entry = _makeEntry(id, pageTitle, target, mediaUrl, await target.length());
       await _saveIndex([...await loadIndex(), entry]);
       return entry;
+    } on DownloadCancelledException {
+      // .part bleibt bewusst liegen — der nächste Aufruf mit derselben
+      // mediaUrl+Titel (also derselben deterministischen ID) setzt hier
+      // über den oben ohnehin vorhandenen Range-Resume fort.
+      rethrow;
     } finally {
       client.close(force: true);
     }
@@ -245,6 +293,7 @@ class VideoDownloader {
     String? referer,
     Map<String, String> headers,
     void Function(DownloadProgress)? onProgress,
+    CancelToken? cancelToken,
   ) async {
     final master = await _fetchText(mediaUrl, referer, headers);
     final playlist = await _chooseVariant(master, mediaUrl, referer, headers);
@@ -257,7 +306,12 @@ class VideoDownloader {
       throw StateError('HLS-Playlist enthält keine Segmente');
     }
 
-    final id = _randomId();
+    // Anders als beim direkten Download oben: hier gibt es noch KEIN
+    // echtes Segment-Resume (welches Segment zuletzt geschrieben wurde
+    // müsste separat mitgeführt werden). "Pausieren" bricht sauber ab,
+    // ein späterer erneuter Aufruf beginnt beim Segment 0 neu — ehrliche
+    // Einschränkung, keine stillschweigende Lücke.
+    final id = _deterministicId(mediaUrl, pageTitle);
     final ext = playlist.contains('#EXT-X-MAP') ? 'mp4' : 'ts';
     final dir = await downloadsDir();
     final baseName = _sanitize(pageTitle)
@@ -272,6 +326,9 @@ class VideoDownloader {
     int done = 0;
     try {
       for (var i = 0; i < segments.length; i++) {
+        if (cancelToken?.isCancelled == true) {
+          throw DownloadCancelledException();
+        }
         final response = await _openRange(client, segments[i], referer, headers, null)
             .timeout(_readTimeout);
         if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -418,9 +475,19 @@ class VideoDownloader {
 
   static String _resolve(String base, String child) => Uri.parse(base).resolve(child).toString();
 
-  static String _randomId() {
-    final rnd = Random.secure();
-    return List.generate(12, (_) => rnd.nextInt(16).toRadixString(16)).join();
+  /// Deterministisch statt zufällig, extra kurz gehasht (8 Hex-Zeichen
+  /// reichen für Kollisionsfreiheit innerhalb einer Downloads-Warteschlange,
+  /// das ist kein Sicherheits-Hash). Dieselbe mediaUrl+Titel-Kombination
+  /// ergibt immer denselben Dateinamen — Voraussetzung dafür, dass
+  /// "Pausieren" (CancelToken) später an derselben .part-Datei fortsetzt.
+  static String _deterministicId(String mediaUrl, String title) {
+    final input = '$mediaUrl|$title';
+    var hash = 0x811C9DC5; // FNV-1a 32-bit offset basis
+    for (final byte in utf8.encode(input)) {
+      hash ^= byte;
+      hash = (hash * 0x01000193) & 0xFFFFFFFF; // FNV prime, 32-bit wrap
+    }
+    return hash.toRadixString(16).padLeft(8, '0');
   }
 }
 
