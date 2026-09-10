@@ -61,6 +61,7 @@ class NetworkSniffer {
   }
   function likely(url, mime) {
     if (!url || /^data:|^javascript:/i.test(url)) return false;
+    if (/^blob:/i.test(url)) return true;
     return mediaRe.test(url) || pathRe.test(url) || (mime && mimeRe.test(mime));
   }
   function contextHeaders(h) {

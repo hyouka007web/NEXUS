@@ -135,7 +135,9 @@ class VideoHarvesterEngine {
         url: normalized,
         host: host,
         type: type,
-        status: 'MEDIA SOURCE · ${capture.source}',
+        status: type == 'BLOB'
+            ? 'MEDIA SOURCE · ${capture.source} (blob: — nicht direkt herunterladbar)'
+            : 'MEDIA SOURCE · ${capture.source}',
         source: capture.source,
         pageUrl: capture.pageUrl,
         referrer: capture.referrer,
@@ -164,9 +166,11 @@ class VideoHarvesterEngine {
       } catch (_) {
         host = '';
       }
-      final status = {'MP4', 'WEBM', 'M3U8', 'MEDIA', 'DASH'}.contains(type)
-          ? 'MEDIA SOURCE'
-          : 'PLAYER / VIDEO PAGE';
+      final status = type == 'BLOB'
+          ? 'MEDIA SOURCE (blob: — nicht direkt herunterladbar)'
+          : {'MP4', 'WEBM', 'M3U8', 'MEDIA', 'DASH'}.contains(type)
+              ? 'MEDIA SOURCE'
+              : 'PLAYER / VIDEO PAGE';
       out.add(HarvestedVideo(
         title: pageTitle,
         url: normalized,
@@ -264,6 +268,13 @@ class VideoHarvesterEngine {
     try {
       final u = Uri.parse(url);
       final scheme = u.scheme.toLowerCase();
+      if (scheme == 'blob') {
+        // blob:https://origin/uuid — kein normaler Host-Teil, aber ein
+        // starkes, eigenständiges Signal (siehe _classify: wird als
+        // eigener, ausdrücklich NICHT herunterladbarer Typ markiert statt
+        // stillschweigend verworfen zu werden).
+        return url;
+      }
       if ((scheme != 'http' && scheme != 'https') || u.host.isEmpty) {
         return null;
       }
@@ -274,6 +285,7 @@ class VideoHarvesterEngine {
   }
 
   static String _classify(String url) {
+    if (url.toLowerCase().startsWith('blob:')) return 'BLOB';
     String path;
     try {
       path = Uri.parse(url).path.toLowerCase();
