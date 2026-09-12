@@ -100,15 +100,19 @@ jobs:
       # Microsoft's installer with the C++ workload.
       # Then we override CMAKE_GENERATOR_TOOLSET to v143 (VS 2022's compiler)
       # to avoid the C1001 ICE in VS 2019's cl.exe on webview_windows.
+      - run: flutter pub get
+      # windows-latest has VS 2022 pre-installed, but Flutter 3.29
+      # hardcodes the CMake generator as "Visual Studio 16 2019" (compiled
+      # in the SDK, not patchable from .dart source). CMake can't find
+      # VS 2019 because it's not on the runner. We install it.
+      # The C1001 ICE occurs with VS 2019's cl.exe on webview_windows,
+      # but we avoid it by pinning CMAKE_GENERATOR_TOOLSET to v143
+      # (VS 2022's compiler) which is available on the runner.
       - name: Install VS 2019 Build Tools
         shell: pwsh
         run: |
-          Write-Host "Installing VS 2019 Build Tools with C++ tools..."
-          $vs19url = "https://aka.ms/vs/16/release/vs_BuildTools.exe"
-          $vs19path = "$env:TEMP\vs2019buildtools.exe"
-          Invoke-WebRequest -Uri $vs19url -OutFile $vs19path
-          & $vs19path --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --includeRecommended --passive --norestart --wait
-          Write-Host "VS 2019 Build Tools install complete."
+          choco install visualstudio2019buildtools --params "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --norestart --wait" -y --no-progress
+          Write-Host "VS 2019 install exit: $LASTEXITCODE"
       - name: Build Windows
         shell: pwsh
         env:
