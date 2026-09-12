@@ -591,14 +591,14 @@ class HtmlExtractor {
     String source,
   ) {
     final urlPattern = RegExp(
-      r'https?://[^\s<>"\\]+',
+      r'https?://[^\s<>"\]+',
       caseSensitive: false,
     );
     for (final match in urlPattern.allMatches(text)) {
       _addCandidate(candidates, match.group(0)!, baseUri, source);
     }
     // Auch //protokolllose URLs
-    final protoPattern = RegExp(r'//(?!/)[^\s<>"\\]+');
+    final protoPattern = RegExp(r'//(?!/)[^\s<>"\]+');
     for (final match in protoPattern.allMatches(text)) {
       _addCandidate(candidates, 'https:${match.group(0)}', baseUri, source);
     }

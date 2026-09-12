@@ -137,8 +137,8 @@ class NetworkSniffer {
       scripts.forEach(function(s){
         var t = s.textContent || '';
         if (/hls\.js|video\.js|shaka|plyr|jwplayer|m3u8|\.mpd/i.test(t)) {
-          var m, re = /https?:\\?\/\\?\/[^\s"'<>\\]+|(?:blob:)[^\s"'<>]+/gi;
-          while ((m = re.exec(t))) record(m[0].replace(/\\\//g,'/'), 'PLAYER_CONFIG');
+          var m, re = /https?:\?\/\?\/[^\s"'<>\]+|(?:blob:)[^\s"'<>]+/gi;
+          while ((m = re.exec(t))) record(m[0].replace(/\\//g,'/'), 'PLAYER_CONFIG');
         }
       });
       ['__INITIAL_STATE__','__NEXT_DATA__','__NUXT__'].forEach(function(k){

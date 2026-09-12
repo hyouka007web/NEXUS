@@ -28,7 +28,7 @@ class ManifestParser {
   static List<MediaVariant> parseHls(String text, String base) {
     final out = <MediaVariant>[];
     final lines = text.split(RegExp(r'\r?\n')).map((e) => e.trim()).toList();
-    final re = RegExp(r'([A-Z-]+)=((?:"[^"]*")|[^,]+)', caseSensitive: false);
+    final re = RegExp(r'([A-Z-]+)=\s*(?:"([^"]*)")?([^,]+)', caseSensitive: false);
     for (var i = 0; i < lines.length; i++) {
       final line = lines[i];
       if (!line.toUpperCase().startsWith('#EXT-X-STREAM-INF')) continue;
@@ -119,7 +119,7 @@ class ManifestParser {
   }
 
   static String? _tag(String text, String name) =>
-      RegExp('<$name\\b[^>]*>([\\s\\S]*?)</$name>', caseSensitive: false)
+      RegExp('<$name\b[^>]*>([\s\S]*?)</$name>', caseSensitive: false)
           .firstMatch(text)?.group(1)?.trim();
 
   static String _qualityFromBandwidth(int bandwidth) => bandwidth <= 0 ? '' : '${(bandwidth / 1000000).toStringAsFixed(1)} Mbps';

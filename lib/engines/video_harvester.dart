@@ -94,6 +94,7 @@ class VideoHarvester {
   final List<String> _iframeUrls = [];
   int _processedCount = 0;
   bool _ytDlpUsed = false;
+  int _depth = 0;
 
   VideoHarvester({
     HarvestConfig? config,
@@ -106,7 +107,8 @@ class VideoHarvester {
         ),
         _httpClient = httpClient ?? HttpClient() {
     _httpClient.autoUncompress = true;
-    _httpClient.connectionTimeout = config.timeout;
+    // FIX: config kann nullable sein (HarvestConfig?), daher ?? Default
+    _httpClient.connectionTimeout = config?.timeout ?? const Duration(seconds: 30);
   }
 
   /// Haupt-Einstieg: Video-URLs von einer URL sammeln.
@@ -116,7 +118,8 @@ class VideoHarvester {
     // 1. Bestehende VideoHarvesterEngine verwenden (bewährt)
     final engineResults = await VideoHarvesterEngine.harvest(url, deepInspect: true);
 
-    final allVideos = <HarvestedVideo>{};
+    // FIX: Set hat keine putIfAbsent — verwende Map<String, HarvestedVideo>
+    final allVideos = <String, HarvestedVideo>{};
     final docCandidates = <MediaCandidate>[];
     final processedUrls = <String>[url];
 
@@ -155,12 +158,12 @@ class VideoHarvester {
     }
 
     // 3. HLS/DASH-Manifeste parsen
-    for (final video in List.of(allVideos)) {
+    for (final video in List.of(allVideos.values)) {
       if (video.type == 'M3U8' || video.type == 'DASH') {
         _log('Parse Manifest: ${video.url}');
         final enriched = await VideoHarvesterEngine.enrichManifest(video);
         if (enriched.variants.isNotEmpty) {
-          allVideos.remove(video);
+          allVideos.remove(video.url);
           allVideos.putIfAbsent(enriched.url, () => enriched);
           _log('Manifest: ${enriched.variants.length} Varianten gefunden');
         }
@@ -186,7 +189,7 @@ class VideoHarvester {
         '${_iframeUrls.length} iFrames');
 
     return HarvestResult(
-      videos: allVideos.toList(),
+      videos: allVideos.values.toList(),
       docCandidates: docCandidates,
       iframeUrls: _iframeUrls,
       processedUrls: processedUrls,
@@ -200,7 +203,9 @@ class VideoHarvester {
     try {
       final ua = config.userAgents[_processedCount % config.userAgents.length];
       final request = await _httpClient.getUrl(Uri.parse(url));
-      request.headers.userAgent = ua;
+      // FIX: HttpHeaders hat keine userAgent-Property
+      // Korrekt: request.headers.set(HttpHeaders.userAgentHeader, ua)
+      request.headers.set(HttpHeaders.userAgentHeader, ua);
       request.headers.set('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8');
       request.headers.set('Accept-Language', 'de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7');
       config.extraHeaders?.forEach((k, v) => request.headers.set(k, v));
@@ -221,7 +226,7 @@ class VideoHarvester {
   /// Verarbeitet iFrames rekursiv (analog Blatzar-Tutorial Schritt 1+2).
   Future<void> _processIframes(
     List<MediaCandidate> candidates,
-    Set<HarvestedVideo> allVideos,
+    Map<String, HarvestedVideo> allVideos,
     List<MediaCandidate> docCandidates,
   ) async {
     for (final candidate in candidates) {
@@ -250,6 +255,7 @@ class VideoHarvester {
       );
 
       for (final v in iframeVideos) {
+        // FIX: Set.putIfAbsent → Map.putIfAbsent (Map returned by reference)
         if (allVideos.putIfAbsent(v.url, () => v) == v) {
           _log('Video aus iFrame gefunden: ${v.url} (${v.type})');
         }
@@ -310,6 +316,13 @@ class VideoHarvester {
         _errors.add('yt-dlp fehlgeschlagen: ${result.stderr}');
         _log('yt-dlp fehlgeschlagen: ${result.stderr}');
       }
+    } on UnsupportedError catch (e) {
+      // yt-dlp Process.run wird in Flutter-Isolates (compute()) nicht
+      // unterstützt. Da deepScrape() direkt aufgerufen wird (nicht via
+      // compute()), sollte das hier nicht passieren — aber der try-catch
+      // fängt es ab, falls doch.
+      _errors.add('yt-dlp nicht unterstützt: $e');
+      _log('yt-dlp nicht unterstützt: $e');
     } catch (e) {
       _errors.add('yt-dlp nicht verfügbar: $e');
       _log('yt-dlp nicht verfügbar: $e');
@@ -353,10 +366,6 @@ class VideoHarvester {
 
   /// Hilfsfunktion für Logging.
   void _log(String message) {
-    // Nutzt den bestehenden HarvestLogger, falls konfiguriert.
     config.onLog?.call(message);
   }
-
-  /// Aktueller Tiefe-Tracker (für Rekursion).
-  int _depth = 0;
 }

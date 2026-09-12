@@ -30,11 +30,11 @@ class VideoHarvesterEngine {
     caseSensitive: false,
   );
   static final RegExp _urlPattern = RegExp(
-    r'''https?://[^\s"'<>\\]+''',
+    r'''https?://[^\s"'<>\]+''',
     caseSensitive: false,
   );
   static final RegExp _escapedUrlPattern = RegExp(
-    r'''https?:\\?/\\?/[^\s"'<>]+''',
+    r'''https?:\?/\?/[^\s"'<>]+''',
     caseSensitive: false,
   );
   static final RegExp _titlePattern = RegExp(
