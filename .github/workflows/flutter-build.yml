@@ -106,10 +106,10 @@ jobs:
           Write-Host "VS 2019 install exit: $LASTEXITCODE"
       - name: Build Windows
         shell: pwsh
-        env:
-          CMAKE_GENERATOR: "Visual Studio 16 2019"
-          CMAKE_GENERATOR_TOOLSET: "v143"
-        run: flutter build windows --release
+        run: |
+          # Use --cmake-args to pass -T v143 (VS 2022 compiler) to avoid
+          # C1001 ICE in VS 2019's cl.exe on webview_windows C++/WinRT.
+          flutter build windows --release --cmake-args="-T v143"
 
       - name: Windows-Bundle als zip
         shell: pwsh
