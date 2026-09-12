@@ -92,20 +92,22 @@ jobs:
         run: flutter create --platforms=windows --org ${{ env.ORG }} --project-name ${{ env.PROJECT_NAME }} .
 
       - run: flutter pub get
-      # windows-latest has VS 2022 pre-installed, but Flutter hardcodes the
-      # "Visual Studio 16 2019" CMake generator in its windows.dart.
-      # Patch it at build time to use VS 2022 generator instead.
-      - name: Patch Flutter to use VS 2022 generator
+      # windows-latest comes with VS 2022 pre-installed, but Flutter
+      # hardcodes "Visual Studio 16 2019" as the CMake generator.
+      # We install VS 2019 Build Tools (so CMake/vswhere finds VS 2019),
+      # but use the VS 2022 C++ compiler (v143 toolset) to avoid the
+      # C1001 ICE bug in VS 2019's cl.exe on webview_windows/winrt.
+      - name: Install VS 2019 Build Tools + VS 2022 toolset override
         shell: pwsh
         run: |
-          $w = "$env:FLUTTER_ROOT\packages\flutter_tools\lib\src\build_system\targets\windows.dart"
-          if (Test-Path $w) {
-            (Get-Content $w -Raw) -replace 'Visual Studio 16 2019', 'Visual Studio 17 2022' | Set-Content $w
-            Write-Host "Patched windows.dart: VS 2019 -> VS 2022"
-          } else {
-            Write-Host "WARNING: windows.dart not found"
-          }
-      - run: flutter build windows --release
+          choco install visualstudio2019buildtools --params "--add Microsoft.VisualStudio.Workload.VCTools" -y --no-progress
+          Write-Host "VS 2019 Build Tools installed (for CMake generator detection)"
+      - name: Build Windows
+        shell: pwsh
+        env:
+          # Force VS 2022 compiler to avoid C1001 ICE
+          CMAKE_GENERATOR_TOOLSET: "v143"
+        run: flutter build windows --release
 
       - name: Windows-Bundle als zip
         shell: pwsh
