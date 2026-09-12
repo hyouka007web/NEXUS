@@ -312,8 +312,8 @@ class DocScraper {
       final textPages = cleaned.isNotEmpty ? [cleaned] : [];
 
       // Metadaten aus PDF-Stream extrahieren (Title, Author)
-      final titleMatch = RegExp(r'/Title\s*\(([^)]*)\)', unicode: true).firstMatch(text);
-      final authorMatch = RegExp(r'/Author\s*\(([^)]*)\)', unicode: true).firstMatch(text);
+      final titleMatch = RegExp(r'/Title\s*\(([^)]*)\)').firstMatch(text);
+      final authorMatch = RegExp(r'/Author\s*\(([^)]*)\)').firstMatch(text);
 
       return _PdfResult(
         title: titleMatch?.group(1),
