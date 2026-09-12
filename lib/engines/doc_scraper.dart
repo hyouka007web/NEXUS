@@ -1,12 +1,13 @@
 // Dart (Flutter-Projekt), async/await, dart:io
-// (konsistent mit video_harvester.dart und scraper_service.dart)
+// (konsistent mit video_harvester.dart und scraper_engine.dart)
 //
 // doc_scraper: PDF/EPUB/MOBI-Dokument-Scraper
 //
 // Findet und scrappt Dokumente (.pdf, .epub, .mobi) in HTML-Seiten.
-// PDF-Textextraktion via pdf_text-Package.
+// PDF-Textextraktion via native Dart-Regex (keine externen Packages,
+// kompatibel mit Android/iOS — pdf_text ist Desktop-only).
 // EPUB-Metadaten via ZIP-Analyse (content.opf).
-// MOBI: Metadaten über Kindle-Gen-CRC (Header-Analyse).
+// MOBI: Metadaten über EXTH-Header (Header-Analyse).
 //
 // Ergebnisse werden im mediathek/ Ordner gespeichert.
 
@@ -283,25 +284,17 @@ class DocScraper {
     );
   }
 
-  /// PDF-Textextraktion via pdf_text-Package.
+  /// PDF-Textextraktion via native Dart-Regex (keine externe Packages,
+  /// kompatibel mit Android/iOS). Extrahiert Metadaten aus PDF-Stream-
+  /// Headern und versucht Text aus dem Raw-Byte-Stream zu lesen.
   Future<_PdfResult> _extractPdfText(String filePath) async {
     try {
-      // pdf_text-Package: PDFText(filePath) oder PdfDocument.openFile()
-      // Verfügbar über: import 'package:pdf_text/pdf_text.dart';
+      // Da pdf_text-Package Desktop-only ist (nicht in pubspec.yaml),
+      // verwenden wir eine native Dart-Variante.
       //
-      // Alternative ohne Package (falls nicht installiert):
-      // PDF-Datei direkt parsen (komplex, fallback auf raw text extraction)
-      //
-      // Da pdf_text Package in pubspec.yaml hinzugefügt werden muss:
-      // pdf_text: ^0.6.0
-      //
-      // Code (mit pdf_text):
-      // final doc = await PDFText(filePath);
-      // final text = doc.text;
-      // final pages = <String>[];
-      // for (int i = 0; i < doc.length; i++) {
-      //   pages.add(await doc.pageAt(i + 1));
-      // }
+      // PDF-Datei direkt parsen: Suche nach Text- und Metadaten-Streams
+      // im Raw-Byte-Stream. Dies ist eine vereinfachte Variante, die
+      // funktioniert, wenn der Text nicht komprimiert/verschlüsselt ist.
 
       // Fallback: Suche nach Text in rohen PDF-Bytes (begrenzt)
       final file = File(filePath);
