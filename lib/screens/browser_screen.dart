@@ -186,7 +186,11 @@ class _BrowserScreenState extends State<BrowserScreen> {
     _showNotification('Tiefe Analyse…', duration: const Duration(seconds: 60));
     try {
       // Deep-Scrape: findet Videos, Dokumente und Media-URLs in HTML, JSON, XML
-      final DeepScrapeResult result = await compute(_deepScrapeIsolate, tab.url);
+      final DeepScrapeResult result = await ScraperEngine.deepScrape(
+        tab.url,
+        useYtDlp: true,
+        mediathekDir: 'mediathek',
+      );
 
       final videoCount = result.videos.length;
       final docCount = result.docs.length;
