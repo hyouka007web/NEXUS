@@ -279,7 +279,7 @@ class VideoHarvester {
   Future<List<HarvestedVideo>> _tryYtDlp(String url) async {
     final ytDlp = config.ytDlpPath ?? 'yt-dlp';
     try {
-      _log('Rufe yt-dlp auf: $ytDlp -f best --get-url $url');
+      _log('Rufe yt-dlp auf: $ytDlp -f best --get-url "$url"');
       final result = await Process.run(
         ytDlp,
         ['-f', 'best', '--get-url', url],
@@ -308,11 +308,8 @@ class VideoHarvester {
         return videos;
       } else {
         _errors.add('yt-dlp fehlgeschlagen: ${result.stderr}');
-        _log('yt-dlp fehlgeschlagen');
+        _log('yt-dlp fehlgeschlagen: ${result.stderr}');
       }
-    } on UnsupportedError catch (e) {
-      _log('yt-dlp nicht unterstützt in diesem Isolate: $e');
-      _errors.add('yt-dlp nicht unterstützt: Process.run in Isolate nicht verfügbar');
     } catch (e) {
       _errors.add('yt-dlp nicht verfügbar: $e');
       _log('yt-dlp nicht verfügbar: $e');

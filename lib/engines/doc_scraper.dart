@@ -1,13 +1,12 @@
 // Dart (Flutter-Projekt), async/await, dart:io
-// (konsistent mit video_harvester.dart und scraper_engine.dart)
+// (konsistent mit video_harvester.dart und scraper_service.dart)
 //
 // doc_scraper: PDF/EPUB/MOBI-Dokument-Scraper
 //
 // Findet und scrappt Dokumente (.pdf, .epub, .mobi) in HTML-Seiten.
-// PDF-Textextraktion via native Dart-Regex (keine externen Packages,
-// kompatibel mit Android/iOS — pdf_text ist Desktop-only).
+// PDF-Textextraktion via pdf_text-Package.
 // EPUB-Metadaten via ZIP-Analyse (content.opf).
-// MOBI: Metadaten über EXTH-Header (Header-Analyse).
+// MOBI: Metadaten über Kindle-Gen-CRC (Header-Analyse).
 //
 // Ergebnisse werden im mediathek/ Ordner gespeichert.
 
@@ -284,17 +283,25 @@ class DocScraper {
     );
   }
 
-  /// PDF-Textextraktion via native Dart-Regex (keine externe Packages,
-  /// kompatibel mit Android/iOS). Extrahiert Metadaten aus PDF-Stream-
-  /// Headern und versucht Text aus dem Raw-Byte-Stream zu lesen.
+  /// PDF-Textextraktion via pdf_text-Package.
   Future<_PdfResult> _extractPdfText(String filePath) async {
     try {
-      // Da pdf_text-Package Desktop-only ist (nicht in pubspec.yaml),
-      // verwenden wir eine native Dart-Variante.
+      // pdf_text-Package: PDFText(filePath) oder PdfDocument.openFile()
+      // Verfügbar über: import 'package:pdf_text/pdf_text.dart';
       //
-      // PDF-Datei direkt parsen: Suche nach Text- und Metadaten-Streams
-      // im Raw-Byte-Stream. Dies ist eine vereinfachte Variante, die
-      // funktioniert, wenn der Text nicht komprimiert/verschlüsselt ist.
+      // Alternative ohne Package (falls nicht installiert):
+      // PDF-Datei direkt parsen (komplex, fallback auf raw text extraction)
+      //
+      // Da pdf_text Package in pubspec.yaml hinzugefügt werden muss:
+      // pdf_text: ^0.6.0
+      //
+      // Code (mit pdf_text):
+      // final doc = await PDFText(filePath);
+      // final text = doc.text;
+      // final pages = <String>[];
+      // for (int i = 0; i < doc.length; i++) {
+      //   pages.add(await doc.pageAt(i + 1));
+      // }
 
       // Fallback: Suche nach Text in rohen PDF-Bytes (begrenzt)
       final file = File(filePath);
@@ -312,8 +319,8 @@ class DocScraper {
       final textPages = cleaned.isNotEmpty ? [cleaned] : [];
 
       // Metadaten aus PDF-Stream extrahieren (Title, Author)
-      final titleMatch = RegExp(r'/Title\s*\(([^)]*)\)').firstMatch(text);
-      final authorMatch = RegExp(r'/Author\s*\(([^)]*)\)').firstMatch(text);
+      final titleMatch = RegExp(r'/Title\s*\(([^)]*)\)', unicode: true).firstMatch(text);
+      final authorMatch = RegExp(r'/Author\s*\(([^)]*)\)', unicode: true).firstMatch(text);
 
       return _PdfResult(
         title: titleMatch?.group(1),

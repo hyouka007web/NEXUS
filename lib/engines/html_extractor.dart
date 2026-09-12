@@ -213,7 +213,7 @@ class HtmlExtractor {
   int _depth = 0;
 
   HtmlExtractor({
-    HttpClient? client,
+    http.Client? client,
     List<String>? userAgents,
     Duration? timeout,
     int maxDepth = 3,

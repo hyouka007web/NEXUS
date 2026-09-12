@@ -1,4 +1,4 @@
-import 'package:flutter/services.dart';
+import "package:flutter/services.dart";
 import 'dart:async';
 import 'dart:convert';
 
@@ -6,13 +6,10 @@ import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
-import '../engines/doc_scraper.dart';
 import '../engines/harvest_logger.dart';
-import '../engines/html_extractor.dart';
 import '../engines/network_sniffer.dart';
 import '../engines/scraper_engine.dart';
 import '../engines/video_downloader.dart';
-import '../engines/video_harvester.dart';
 import '../engines/video_harvester_engine.dart';
 import '../models/block_event.dart';
 import '../models/download_task.dart';
@@ -46,34 +43,10 @@ import 'start_page.dart';
 /// Netzwerk-Crawl des Harvesters) nicht mehr auf dem UI-Isolate und kann
 /// die Bildwiederholung nicht mehr blockieren — siehe Performance-Hinweis
 /// weiter unten in dieser Datei.
-/// Top-Level-Funktion für compute()-Isolate:
-/// Führt Deep-Analyse aus (HTML-Extractor + Video-Harvester + Doc-Scraper).
-Future<DeepScrapeResult> _deepScrapeIsolate(String url) async {
-  return await ScraperEngine.deepScrape(
-    url,
-    useYtDlp: true,
-    mediathekDir: 'mediathek',
-  );
-}
-
 Future<ScrapeResult> _scrapeIsolate(String url) => ScraperEngine.scrape(url);
 
 Future<List<HarvestedVideo>> _harvestIsolate(String url) =>
     VideoHarvesterEngine.harvest(url);
-
-/// Neuer Isolates-basierter Deep-Harvest:
-/// Verwendet VideoHarvester (rekursive iFrames + yt-dlp + Deep-HTML).
-Future<HarvestResult> _deepHarvestIsolate(String url) async {
-  final harvester = VideoHarvester(
-    config: HarvestConfig(
-      useYtDlp: true,
-      maxDepth: 3,
-      timeout: const Duration(seconds: 30),
-      onLog: (msg) => print('[VideoHarvester] $msg'),
-    ),
-  );
-  return await harvester.harvest(url);
-}
 
 class BrowserScreen extends StatefulWidget {
   const BrowserScreen({super.key});
@@ -183,21 +156,11 @@ class _BrowserScreenState extends State<BrowserScreen> {
       _showNotification('Erst eine Seite öffnen');
       return;
     }
-    _showNotification('Tiefe Analyse…', duration: const Duration(seconds: 60));
+    _showNotification('Analysiere…', duration: const Duration(seconds: 30));
     try {
-      // Deep-Scrape: findet Videos, Dokumente und Media-URLs in HTML, JSON, XML
-      final DeepScrapeResult result = await ScraperEngine.deepScrape(
-        tab.url,
-        useYtDlp: true,
-        mediathekDir: 'mediathek',
-      );
-
-      final videoCount = result.videos.length;
-      final docCount = result.docs.length;
-      final mediaCount = result.links.length;
-
+      final ScrapeResult result = await compute(_scrapeIsolate, tab.url);
       _showNotification(
-        '$videoCount Videos · $docCount Dokumente · $mediaCount Medien gefunden',
+        '${result.links.length} Links · ${result.media.length} Medien gefunden',
         actionLabel: 'DETAILS',
         onAction: () => _showScrapeDetails(result),
       );
@@ -206,7 +169,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
     }
   }
 
-  void _showScrapeDetails(DeepScrapeResult result) {
+  void _showScrapeDetails(ScrapeResult result) {
     showModalBottomSheet(
       context: context,
       backgroundColor: NexusColors.bgSurface,
@@ -219,67 +182,22 @@ class _BrowserScreenState extends State<BrowserScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(result.title ?? 'NEXUS', style: Theme.of(context).textTheme.titleMedium),
-            Text('${result.videos.length} Videos · ${result.docs.length} Dokumente · ${result.links.length} Medien'),
+            Text(result.title, style: Theme.of(context).textTheme.titleMedium),
+            Text('${result.links.length} Links · ${result.media.length} Medien'),
             const SizedBox(height: 12),
-            if (result.videos.isNotEmpty) ...[
-              const Text('Videos:', style: TextStyle(fontWeight: FontWeight.bold)),
-              Flexible(
-                child: ListView(
-                  shrinkWrap: true,
-                  children: result.videos.take(30).map((v) => ListTile(
-                    title: Text(v.title.isEmpty ? v.host : v.title, style: const TextStyle(fontSize: 12)),
-                    subtitle: Text('${v.type} · ${v.url}', style: const TextStyle(fontSize: 10)),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.download, size: 16),
-                      onPressed: () => _downloadVideo(v, v.pageUrl),
-                    ),
-                  )).toList(),
-                ),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                children: result.media
+                    .take(50)
+                    .map((m) => Text(m, style: const TextStyle(fontSize: 12)))
+                    .toList(),
               ),
-            ],
-            if (result.docs.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              const Text('Dokumente:', style: TextStyle(fontWeight: FontWeight.bold)),
-              Flexible(
-                child: ListView(
-                  shrinkWrap: true,
-                  children: result.docs.take(20).map((d) => ListTile(
-                    title: Text(d.title, style: const TextStyle(fontSize: 12)),
-                    subtitle: Text('${d.type} · ${_formatBytes(d.bytes)}', style: const TextStyle(fontSize: 10)),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.folder_open, size: 16),
-                      onPressed: () => _openDoc(d.localPath),
-                    ),
-                  )).toList(),
-                ),
-              ),
-            ],
-            if (result.errors.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text('Fehler (${result.errors.length}):', style: TextStyle(color: Colors.red[300])),
-              Flexible(
-                child: ListView(
-                  shrinkWrap: true,
-                  children: result.errors.map((e) => Text(e, style: const TextStyle(fontSize: 10, color: Colors.red))).toList(),
-                ),
-              ),
-            ],
+            ),
           ],
         ),
       ),
     );
-  }
-
-  String _formatBytes(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-  }
-
-  void _openDoc(String path) {
-    // Öffnet eine lokale Dokument-Datei
-    _showNotification('Dokument gespeichert: $path');
   }
 
   Future<void> _runHarvester() async {
@@ -391,30 +309,12 @@ class _BrowserScreenState extends State<BrowserScreen> {
         HarvestLogger.instance.log('dom-render', 'DOM-Auswertung fehlgeschlagen: $e', level: HarvestLogLevel.error);
       }
 
-      // Ebene 3: Tiefe Video-Suche via VideoHarvester (rekursive iFrames + yt-dlp)
-      // Läuft parallel zum webView-Sniffer in einem Isolate.
-      HarvestLogger.instance.log('deep-harvest', 'Tiefe Video-Suche starten (Isolate)…');
-      final deepResult = await compute(_deepHarvestIsolate, tab.url);
-
-      if (deepResult.videos.isNotEmpty) {
-        final beforeDeep = merged.length;
-        for (final v in deepResult.videos) {
-          merged.putIfAbsent(v.url, () => v);
-        }
-        HarvestLogger.instance.log(
-          'deep-harvest',
-          '${deepResult.videos.length} Videos aus tiefer Suche, ${merged.length - beforeDeep} davon neu',
-          data: {
-            'deepVideos': deepResult.videos.length,
-            'newHits': merged.length - beforeDeep,
-            'ytDlpUsed': deepResult.ytDlpFallbackUsed,
-            'iframeCount': deepResult.iframeUrls.length,
-          },
-        );
-      }
-
-      // Ebene 3 (original): der bisherige Netzwerk-Crawl —
-      // findet Treffer auf verlinkten Seiten (Embeds, Player-Seiten).
+      // Ebene 3: der bisherige Netzwerk-Crawl — findet Treffer auf
+      // verlinkten Seiten (Embeds, weiterführende Player-Seiten), die im
+      // aktuell offenen Tab selbst gar nicht sichtbar sind. Läuft über
+      // compute() in einem eigenen Isolate (Performance-Isolation, siehe
+      // Kommentar bei _harvestIsolate) — deshalb hier nur eine
+      // Zusammenfassung NACH Abschluss, kein Live-Fortschritt pro Seite.
       HarvestLogger.instance.log('crawl', 'Durchsuche verlinkte Seiten (eigener Isolate)…');
       final beforeCrawl = merged.length;
       final crawlResults = await compute(_harvestIsolate, tab.url);
