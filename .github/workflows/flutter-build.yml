@@ -92,20 +92,27 @@ jobs:
         run: flutter create --platforms=windows --org ${{ env.ORG }} --project-name ${{ env.PROJECT_NAME }} .
 
       - run: flutter pub get
-      # windows-latest comes with VS 2022 pre-installed, but Flutter
-      # hardcodes "Visual Studio 16 2019" as the CMake generator.
-      # We install VS 2019 Build Tools (so CMake/vswhere finds VS 2019),
-      # but use the VS 2022 C++ compiler (v143 toolset) to avoid the
-      # C1001 ICE bug in VS 2019's cl.exe on webview_windows/winrt.
-      - name: Install VS 2019 Build Tools + VS 2022 toolset override
+      # windows-latest has VS 2022 pre-installed. Flutter hardcodes the
+      # CMake generator as "Visual Studio 16 2019" (in compiled Dart code,
+      # not source — patching source has no effect). We need VS 2019 to be
+      # findable by vswhere/CMake. Instead of choco (which failed to register
+      # properly with vswhere), we install VS 2019 Build Tools directly from
+      # Microsoft's installer with the C++ workload.
+      # Then we override CMAKE_GENERATOR_TOOLSET to v143 (VS 2022's compiler)
+      # to avoid the C1001 ICE in VS 2019's cl.exe on webview_windows.
+      - name: Install VS 2019 Build Tools
         shell: pwsh
         run: |
-          choco install visualstudio2019buildtools --params "--add Microsoft.VisualStudio.Workload.VCTools" -y --no-progress
-          Write-Host "VS 2019 Build Tools installed (for CMake generator detection)"
+          Write-Host "Installing VS 2019 Build Tools with C++ tools..."
+          $vs19url = "https://aka.ms/vs/16/release/vs_BuildTools.exe"
+          $vs19path = "$env:TEMP\vs2019buildtools.exe"
+          Invoke-WebRequest -Uri $vs19url -OutFile $vs19path
+          & $vs19path --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --includeRecommended --passive --norestart --wait
+          Write-Host "VS 2019 Build Tools install complete."
       - name: Build Windows
         shell: pwsh
         env:
-          # Force VS 2022 compiler to avoid C1001 ICE
+          CMAKE_GENERATOR: "Visual Studio 16 2019"
           CMAKE_GENERATOR_TOOLSET: "v143"
         run: flutter build windows --release
 
