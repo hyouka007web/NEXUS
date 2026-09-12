@@ -48,9 +48,6 @@ dependencies:
   # unabhängig (entspricht Kotlins context.filesDir).
   path_provider: ^2.1.0
 
-  # Für PDF-Textextraktion in doc_scraper.dart
-  pdf_text: ^0.6.0
-
 dev_dependencies:
   flutter_test:
     sdk: flutter

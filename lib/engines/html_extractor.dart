@@ -74,73 +74,77 @@ class MediaCandidate {
 }
 
 /// Regex-Muster für verschiedene HTML-Tags und Attribute.
+/// WICHTIG: In Dart raw strings (r'...') ist \ ein Literal-Backslash.
+/// Daher r'\b' = Backslash + b (für regex \b = Wortgrenze)
+/// und r'\s' = Backslash + s (für regex \s = Whitespace).
+/// Verwende r'''...''' (triple-quoted) wenn das Pattern ein ' enthält.
 class _Patterns {
   // Regex für <video ...>...</video> mit src-Attribut
   static final RegExp videoSrc = RegExp(
-    r'<video\b[^>]*\bsrc\s*=\s*["\']([^"\']+)["\']',
+    r'''<video\b[^>]*\bsrc\s*=\s*['"]([^'"]+)['"]''',
     multiLine: true,
     caseSensitive: false,
   );
 
   // Regex für <source ... src="..." type="...">
   static final RegExp sourceSrc = RegExp(
-    r'<source\b[^>]*\bsrc\s*=\s*["\']([^"\']+)["\'](?:[^>]*\btype\s*=\s*["\']([^"\']+)["\'])?',
+    r'''<source\b[^>]*\bsrc\s*=\s*['"]([^'"]+)['"](?:[^>]*\btype\s*=\s*['"]([^'"]+)['"])?''',
     multiLine: true,
     caseSensitive: false,
   );
 
   // Regex für <audio ... src="...">
   static final RegExp audioSrc = RegExp(
-    r'<audio\b[^>]*\bsrc\s*=\s*["\']([^"\']+)["\']',
+    r'''<audio\b[^>]*\bsrc\s*=\s*['"]([^'"]+)['"]''',
     multiLine: true,
     caseSensitive: false,
   );
 
   // Regex für <iframe ... src="...">
   static final RegExp iframeSrc = RegExp(
-    r'<iframe\b[^>]*\bsrc\s*=\s*["\']([^"\']+)["\']',
+    r'''<iframe\b[^>]*\bsrc\s*=\s*['"]([^'"]+)['"]''',
     multiLine: true,
     caseSensitive: false,
   );
 
   // Regex für <embed ... src="...">
   static final RegExp embedSrc = RegExp(
-    r'<embed\b[^>]*\bsrc\s*=\s*["\']([^"\']+)["\']',
+    r'''<embed\b[^>]*\bsrc\s*=\s*['"]([^'"]+)['"]''',
     multiLine: true,
     caseSensitive: false,
   );
 
   // Regex für <object ... data="...">
   static final RegExp objectData = RegExp(
-    r'<object\b[^>]*\bdata\s*=\s*["\']([^"\']+)["\']',
+    r'''<object\b[^>]*\bdata\s*=\s*['"]([^'"]+)['"]''',
     multiLine: true,
     caseSensitive: false,
   );
 
   // Regex für <a href="...">
   static final RegExp linkHref = RegExp(
-    r'<a\b[^>]*\bhref\s*=\s*["\']([^"\']+)["\']',
+    r'''<a\b[^>]*\bhref\s*=\s*['"]([^'"]+)['"]''',
     multiLine: true,
     caseSensitive: false,
   );
 
   // Regex für data-*-Attribute (z.B. data-video-src, data-src, data-href)
   static final RegExp dataAttr = RegExp(
-    r'data-(?:[\w-]*?)(?:video|src|href|url|source|media)["\']?\s*=\s*["\']([^"\']+)["\']',
+    r'''data-(?:[\w-]*?)(?:video|src|href|url|source|media)['"]?\s*=\s*['"]([^'"]+)['"]''',
     multiLine: true,
     caseSensitive: false,
   );
 
   // Regex für srcset-Attribute
   static final RegExp srcset = RegExp(
-    r'srcset\s*=\s*["\'][^"\']*(?:,\s*[^"\']*)*["\']',
+    r'''srcset\s*=\s*['"][^'"]*(?:,\s*[^'"]*)*['"]''',
     multiLine: true,
     caseSensitive: false,
   );
 
   // Regex für <title>...</title>
   static final RegExp title = RegExp(
-    r'<title[^>]*>\s*(.*?)\s*</title>',
+    r'''<title[^>]*>\s*(.*?)\s*</title>''',
     multiLine: true,
     caseSensitive: false,
     dotAll: true,
@@ -148,25 +152,25 @@ class _Patterns {
 
   // Regex für <meta name="description" content="...">
   static final RegExp metaDescription = RegExp(
-    r'<meta\b[^>]*\bname\s*=\s*["\']description["\'][^>]*\bcontent\s*=\s*["\']([^"\']*)["\']',
+    r'''<meta\b[^>]*\bname\s*=\s*['"]description['"][^>]*\bcontent\s*=\s*['"]([^'"]*)['"]''',
     caseSensitive: false,
   );
 
   // Regex für <meta property="og:*" content="...">
   static final RegExp ogMeta = RegExp(
-    r'<meta\b[^>]*\bproperty\s*=\s*["\'](og:[\w:]+)["\'][^>]*\bcontent\s*=\s*["\']([^"\']*)["\']',
+    r'''<meta\b[^>]*\bproperty\s*=\s*['"](og:[\w:]+)['"][^>]*\bcontent\s*=\s*['"]([^'"]*)['"]''',
     caseSensitive: false,
   );
 
   // Regex für <meta name="twitter:*" content="...">
   static final RegExp twitterMeta = RegExp(
-    r'<meta\b[^>]*\bname\s*=\s*["\'](twitter:[\w:]+)["\'][^>]*\bcontent\s*=\s*["\']([^"\']*)["\']',
+    r'''<meta\b[^>]*\bname\s*=\s*['"](twitter:[\w:]+)['"][^>]*\bcontent\s*=\s*['"]([^'"]*)['"]''',
     caseSensitive: false,
   );
 
   // Regex für <script type="application/ld+json">...</script>
   static final RegExp jsonLd = RegExp(
-    r'<script\b[^>]*\btype\s*=\s*["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+    r'''<script\b[^>]*\btype\s*=\s*['"]application/ld\+json['"][^>]*>(.*?)</script>''',
     multiLine: true,
     caseSensitive: false,
     dotAll: true,
@@ -174,7 +178,7 @@ class _Patterns {
 
   // Regex für <script type="application/json">...</script>
   static final RegExp appJson = RegExp(
-    r'<script\b[^>]*\btype\s*=\s*["\']application/json["\'][^>]*>(.*?)</script>',
+    r'''<script\b[^>]*\btype\s*=\s*['"]application/json['"][^>]*>(.*?)</script>''',
     multiLine: true,
     caseSensitive: false,
     dotAll: true,
@@ -183,7 +187,7 @@ class _Patterns {
   // Regex für versteckte JSON-Blobs in Script-Tags:
   // window.__INITIAL_STATE__, __NEXT_DATA__, window.__DATA__
   static final RegExp jsonBlob = RegExp(
-    r'(?:window\.__INITIAL_STATE__|__NEXT_DATA__|window\.__DATA__)\s*=\s*(\{.*?\});',
+    r'''(?:window\.__INITIAL_STATE__|__NEXT_DATA__|window\.__DATA__)\s*=\s*(\{.*?\});''',
     multiLine: true,
     caseSensitive: false,
     dotAll: true,
@@ -213,7 +217,7 @@ class HtmlExtractor {
   int _depth = 0;
 
   HtmlExtractor({
-    http.Client? client,
+    HttpClient? client,
     List<String>? userAgents,
     Duration? timeout,
     int maxDepth = 3,
@@ -235,7 +239,7 @@ class HtmlExtractor {
   Future<HtmlExtractResult> extract(String url, {Map<String, String>? extraHeaders}) async {
     final client = _client ?? HttpClient();
     final req = await client.getUrl(Uri.parse(url)).timeout(_timeout);
-    req.headers.userAgent = _userAgents[_depth % _userAgents.length];
+    req.headers.set(HttpHeaders.userAgentHeader, _userAgents[_depth % _userAgents.length]);
     req.headers.add('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8');
     extraHeaders?.forEach((k, v) => req.headers.add(k, v));
 
@@ -359,7 +363,7 @@ class HtmlExtractor {
 
     // loc-Tags in Sitemaps: <loc>https://example.com/video.mp4</loc>
     final locPattern = RegExp(
-      r'<loc\s*>([^<]+)<',
+      r'''<loc\s*>([^<]+)<''',
       caseSensitive: false,
     );
     for (final match in locPattern.allMatches(xmlContent)) {
@@ -368,7 +372,7 @@ class HtmlExtractor {
 
     // enclosure-Tags in RSS: <enclosure url="..." type="video/mp4" />
     final enclosurePattern = RegExp(
-      r'<enclosure\b[^>]*\burl\s*=\s*["\']([^"\']+)["\']',
+      r'''<enclosure\b[^>]*\burl\s*=\s*['"]([^'"]+)['"]''',
       caseSensitive: false,
     );
     for (final match in enclosurePattern.allMatches(xmlContent)) {
@@ -377,7 +381,7 @@ class HtmlExtractor {
 
     // content:encoded in RSS: <content:encoded>...<img src="...">...</content:encoded>
     final contentEncoded = RegExp(
-      r'<content:encoded>\s*(.*?)\s*</content:encoded>',
+      r'''<content:encoded>\s*(.*?)\s*</content:encoded>''',
       caseSensitive: false,
       dotAll: true,
     );
@@ -388,7 +392,7 @@ class HtmlExtractor {
 
     // media:content in RSS/Atom: <media:content url="..."/>
     final mediaContentPattern = RegExp(
-      r'<media:content\b[^>]*\burl\s*=\s*["\']([^"\']+)["\']',
+      r'''<media:content\b[^>]*\burl\s*=\s*['"]([^'"]+)['"]''',
       caseSensitive: false,
     );
     for (final match in mediaContentPattern.allMatches(xmlContent)) {
@@ -397,7 +401,7 @@ class HtmlExtractor {
 
     // media:thumbnail: <media:thumbnail url="..."/>
     final mediaThumbnailPattern = RegExp(
-      r'<media:thumbnail\b[^>]*\burl\s*=\s*["\']([^"\']+)["\']',
+      r'''<media:thumbnail\b[^>]*\burl\s*=\s*['"]([^'"]+)['"]''',
       caseSensitive: false,
     );
     for (final match in mediaThumbnailPattern.allMatches(xmlContent)) {
@@ -406,7 +410,7 @@ class HtmlExtractor {
 
     // Link-Tags in XML: <link href="...">
     final linkPattern = RegExp(
-      r'<link\b[^>]*\bhref\s*=\s*["\']([^"\']+)["\']',
+      r'''<link\b[^>]*\bhref\s*=\s*['"]([^'"]+)['"]''',
       caseSensitive: false,
     );
     for (final match in linkPattern.allMatches(xmlContent)) {
@@ -587,14 +591,14 @@ class HtmlExtractor {
     String source,
   ) {
     final urlPattern = RegExp(
-      r'https?://[^\s<>"\'\\]+',
+      r'https?://[^\s<>"\\]+',
       caseSensitive: false,
     );
     for (final match in urlPattern.allMatches(text)) {
       _addCandidate(candidates, match.group(0)!, baseUri, source);
     }
     // Auch //protokolllose URLs
-    final protoPattern = RegExp(r'//(?!/)[^\s<>"\'\\]+');
+    final protoPattern = RegExp(r'//(?!/)[^\s<>"\\]+');
     for (final match in protoPattern.allMatches(text)) {
       _addCandidate(candidates, 'https:${match.group(0)}', baseUri, source);
     }
@@ -608,7 +612,7 @@ class HtmlExtractor {
   ) {
     // <script type="text/javascript">...</script> und <script>...</script>
     final scriptPattern = RegExp(
-      r'<script\b[^>]*>(.*?)</script>',
+      r'''<script\b[^>]*>(.*?)</script>''',
       multiLine: true,
       caseSensitive: false,
       dotAll: true,
