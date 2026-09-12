@@ -130,9 +130,8 @@ class ScraperEngine {
     final titleMatch = _titlePattern.firstMatch(html);
     final title = titleMatch != null
         ? _decodeHtml(titleMatch.group(1) ?? '')
-            .replaceAll(RegExp(r'\s+'), ' ')
             .trim()
-            .let((s) => s.length > 200 ? s.substring(0, 200) : s)
+            .then((s) => s.length > 200 ? s.substring(0, 200) : s)
         : (base.host.isNotEmpty ? base.host : 'NEXUS');
 
     return ScrapeResult(
