@@ -92,20 +92,13 @@ jobs:
         run: flutter create --platforms=windows --org ${{ env.ORG }} --project-name ${{ env.PROJECT_NAME }} .
 
       - run: flutter pub get
-      # windows-latest has VS 2022 pre-installed. Flutter hardcodes the
-      # CMake generator as "Visual Studio 16 2019" (in compiled Dart code,
-      # not source — patching source has no effect). We need VS 2019 to be
-      # findable by vswhere/CMake. Instead of choco (which failed to register
-      # properly with vswhere), we install VS 2019 Build Tools directly from
-      # Microsoft's installer with the C++ workload.
-
-
-      - run: flutter pub get
       # windows-latest has VS 2022 pre-installed, but Flutter 3.29
-      # hardcodes CMake generator "Visual Studio 16 2019" (compiled in
-      # the SDK). CMake needs VS 2019 to be findable by vswhere.
-      # The C1001 ICE may occur with VS 2019's MSVC on webview_windows,
-      # but we rely on the choco-installed VS 2019 having the latest MSVC.
+      # hardcodes CMake generator "Visual Studio 16 2019" (compiled).
+      # CMake needs VS 2019 findable by vswhere. We install VS 2019
+      # Build Tools via choco (properly registers with vswhere).
+      # The C1001 ICE occurs with VS 2019's MSVC on webview_windows,
+      # so we override CMAKE_GENERATOR_TOOLSET to v143 (VS 2022's compiler,
+      # which is also on the windows-latest runner).
       - name: Install VS 2019 Build Tools
         shell: pwsh
         run: |
@@ -115,8 +108,8 @@ jobs:
         shell: pwsh
         env:
           CMAKE_GENERATOR: "Visual Studio 16 2019"
-        run: |
-          flutter build windows --release
+          CMAKE_GENERATOR_TOOLSET: "v143"
+        run: flutter build windows --release
 
       - name: Windows-Bundle als zip
         shell: pwsh
