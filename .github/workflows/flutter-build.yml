@@ -96,6 +96,22 @@ jobs:
       # detection picks the highest VS version found. Since only VS 2022
       # is installed (no VS 2019), Flutter uses the "Visual Studio 17 2022"
       # CMake generator and VS 2022's compiler, avoiding the C1001 ICE.
+      - name: Debug VS installation
+        shell: pwsh
+        run: |
+          Write-Host "=== vswhere location ==="
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (Test-Path $vswhere) {
+            Write-Host "vswhere found at: $vswhere"
+            Write-Host "=== VS installations ==="
+            & $vswhere -format json -products * -utf8 | Out-String
+          } else {
+            Write-Host "vswhere NOT found at: $vswhere"
+          }
+          Write-Host "=== VS directory listing ==="
+          Get-ChildItem "C:\Program Files\Microsoft Visual Studio\" -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "Found: $($_.Name)"
+          }
       - run: flutter build windows --release
 
       - name: Windows-Bundle als zip
