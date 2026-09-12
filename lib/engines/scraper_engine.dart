@@ -1,6 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../engines/doc_scraper.dart';
+import '../engines/html_extractor.dart';
+import '../engines/video_harvester.dart';
+import '../models/harvested_video.dart';
 import '../models/scrape_result.dart';
 
 /// Public-resource scraper. Inspects only the delivered HTML; does not
@@ -193,6 +197,53 @@ class ScraperEngine {
       .replaceAll('&#39;', "'")
       .replaceAll('&lt;', '<')
       .replaceAll('&gt;', '>');
+
+  // --- Erweiterte Scraper-Methoden (Deep-Analyse) ---
+
+  /// Deep-Scrape: Kombiniert ScraperEngine + HtmlExtractor + VideoHarvester + DocScraper.
+  /// Findet Videos, Dokumente und Media-URLs in HTML, JSON-API-Antworten, Sitemaps und RSS-Feeds.
+  static Future<DeepScrapeResult> deepScrape(
+    String pageUrl, {
+    String? mediathekDir,
+    bool useYtDlp = true,
+    List<String>? userAgents,
+    Duration? timeout,
+    int maxDepth = 3,
+  }) async {
+    final harvestConfig = HarvestConfig(
+      useYtDlp: useYtDlp,
+      maxDepth: maxDepth,
+      timeout: timeout ?? const Duration(seconds: 30),
+      userAgents: userAgents ?? HarvestConfig().userAgents,
+      onLog: (msg) => print('[VideoHarvester] $msg'),
+    );
+
+    final docConfig = DocScrapeConfig(
+      mediathekDir: mediathekDir ?? 'mediathek',
+      timeout: timeout ?? const Duration(seconds: 30),
+      userAgents: userAgents ?? DocScrapeConfig().userAgents,
+      onLog: (msg) => print('[DocScraper] $msg'),
+    );
+
+    // 1. Video-Harvest mit rekursiven iFrames und yt-dlp Fallback
+    final videoResult = await VideoHarvester(config: harvestConfig).harvest(pageUrl);
+
+    // 2. Dokument-Scrape
+    final docResult = await DocScraper(config: docConfig).scrape(pageUrl);
+
+    // 3. Basis-HTML-Scrape (für Links/Meta)
+    final basicResult = await scrape(pageUrl);
+
+    return DeepScrapeResult(
+      title: basicResult.title,
+      links: basicResult.media,
+      videos: videoResult.videos,
+      docs: docResult.docs,
+      candidates: videoResult.docCandidates + docResult.candidates,
+      errors: [...videoResult.errors, ...docResult.errors],
+      ytDlpUsed: videoResult.ytDlpFallbackUsed,
+    );
+  }
 }
 
 class _Response {
@@ -203,4 +254,25 @@ class _Response {
 
 extension _Let<T> on T {
   R let<R>(R Function(T) block) => block(this);
+}
+
+/// Erweitertes Scraper-Ergebnis mit Deep-Analyse.
+class DeepScrapeResult {
+  final String? title;
+  final List<HarvestedVideo> videos;
+  final List<ScrapedDoc> docs;
+  final List<String> links;
+  final List<MediaCandidate> candidates;
+  final List<String> errors;
+  final bool ytDlpUsed;
+
+  DeepScrapeResult({
+    this.title,
+    required this.videos,
+    required this.docs,
+    required this.links,
+    required this.candidates,
+    required this.errors,
+    required this.ytDlpUsed,
+  });
 }
