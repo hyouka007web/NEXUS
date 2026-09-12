@@ -82,11 +82,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Visual Studio 2019 Build Tools
-        shell: pwsh
-        run: |
-          choco install visualstudio2019buildtools --params "--add Microsoft.VisualStudio.Component.Windows10SDK --add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --add Microsoft.VisualStudio.Component.NativeDesktop.x86.x64" -y --no-progress
-
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
@@ -97,7 +92,9 @@ jobs:
         run: flutter create --platforms=windows --org ${{ env.ORG }} --project-name ${{ env.PROJECT_NAME }} .
 
       - run: flutter pub get
-      - run: flutter build windows --release
+      # windows-latest has VS 2022 pre-installed. Flutter 3.24.5 CMake
+      # defaults to VS 2019 generator; explicitly use VS 2022 (-G flag).
+      - run: flutter build windows --release -G "Visual Studio 17 2022" 
 
       - name: Windows-Bundle als zip
         shell: pwsh
