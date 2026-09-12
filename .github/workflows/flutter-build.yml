@@ -92,8 +92,14 @@ jobs:
         run: flutter create --platforms=windows --org ${{ env.ORG }} --project-name ${{ env.PROJECT_NAME }} .
 
       - run: flutter pub get
-      # windows-latest has VS 2022 pre-installed. Flutter 3.29 supports VS 2022.
-      - run: flutter build windows --release
+      # windows-latest comes with VS 2022 pre-installed.
+      # Flutter 3.29's windows tool still defaults to "Visual Studio 16 2019"
+      # generator via vswhere. We set CMAKE_GENERATOR to VS 2022 to override.
+      - name: Build Windows
+        shell: pwsh
+        env:
+          CMAKE_GENERATOR: "Visual Studio 17 2022"
+        run: flutter build windows --release
 
       - name: Windows-Bundle als zip
         shell: pwsh
