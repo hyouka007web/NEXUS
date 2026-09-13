@@ -44,8 +44,12 @@ jobs:
       - name: Set compileSdkVersion to 34
         run: |
           if [ -f "android/app/build.gradle" ]; then
-            sed -i 's/compileSdkVersion 35/compileSdkVersion 34/g' android/app/build.gradle
-            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' android/app/build.gradle
+            # Replace any compileSdk reference with 34
+            # Handle: compileSdkVersion 35, compileSdk 35, compileSdk = 35, etc.
+            sed -i 's/compileSdk\w*\s*[=]*\s*[0-9]\+/compileSdk 34/g' android/app/build.gradle
+            sed -i 's/compileSdkVersion\s*[=]*\s*[0-9]\+/compileSdkVersion 34/g' android/app/build.gradle
+            echo "=== compileSdk after patch ==="
+            grep -n "compileSdk" android/app/build.gradle || true
           fi
 
       - run: flutter build apk --release
