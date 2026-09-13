@@ -30,60 +30,39 @@ jobs:
           channel: "stable"
           cache: true
 
-      # Generate android/ folder if it doesn't exist
+      # FIX: Remove existing android/ folder to prevent flutter create conflicts
+      # Then generate a fresh one
       - name: Android-Ordner erzeugen
         run: |
-          if [ ! -d "android/app" ]; then
-            flutter create --platforms=android --org ${{ env.ORG }} --project-name ${{ env.PROJECT_NAME }} .
-          fi
+          rm -rf android/
+          flutter create --platforms=android --org ${{ env.ORG }} --project-name ${{ env.PROJECT_NAME }} .
+          echo "=== Generated build.gradle ==="
+          grep "compileSdk" android/app/build.gradle || true
 
       - run: flutter pub get
-      
-      # FIX: Force compileSdkVersion to 34 in all forms
-      # Flutter 3.24 may generate compileSdk 35 which is unavailable on ubuntu-latest
+
+      # FIX: Lower compileSdkVersion to 34 (Flutter 3.24 may default to 35,
+      #       which may not be installed on ubuntu-latest runners)
       - name: Set compileSdkVersion to 34
         run: |
           if [ -f "android/app/build.gradle" ]; then
-            # Replace compileSdkVersion flutter.compileSdkVersion
             sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' android/app/build.gradle
-            # Replace compileSdk flutter.compileSdk
             sed -i 's/compileSdk flutter.compileSdk/compileSdk 34/g' android/app/build.gradle
-            # Replace any compileSdk = <number>
             sed -i 's/compileSdk[s]* = [0-9]*/compileSdk 34/g' android/app/build.gradle
-            # Replace any compileSdkVersion = <number>
             sed -i 's/compileSdkVersion = [0-9]*/compileSdkVersion 34/g' android/app/build.gradle
-            # Replace compileSdkVersion <number>
             sed -i 's/compileSdkVersion [0-9]*/compileSdkVersion 34/g' android/app/build.gradle
-            # Replace compileSdk <number>
             sed -i 's/compileSdk [0-9]*/compileSdk 34/g' android/app/build.gradle
-            echo "=== compileSdk after patch ==="
-            grep -n "compileSdk" android/app/build.gradle || true
           fi
 
-      # Build with verbose error output
-      - run: |
-          flutter build apk --release 2>&1 | tee /tmp/build_apk.log; echo "EXIT_CODE=$\{PIPESTATUS[0]}"
-          if [ ${PIPESTATUS[0]} -ne 0 ]; then
-            echo "=== BUILD FAILED - showing last 50 lines ==="
-            tail -50 /tmp/build_apk.log
-            echo "=== Searching for errors ==="
-            grep -i "error" /tmp/build_apk.log | tail -20 || true
-            grep -i "failed" /tmp/build_apk.log | tail -20 || true
-            grep -i "exception" /tmp/build_apk.log | tail -20 || true
-            grep -i "e:/" /tmp/build_apk.log | tail -20 || true
-          fi
-          exit ${PIPESTATUS[0]}
+      - run: flutter build apk --release
 
-      - name: Find APK
+      - name: Find and Upload APK
         run: |
           find build/app/outputs/flutter-apk/ -name "*.apk" -exec ls -la {} \; 2>/dev/null || true
-          # Copy APK to workspace root if found
           APK_FILE=$(find build/app/outputs/flutter-apk/ -name "*.apk" -print -quit)
           if [ -n "$APK_FILE" ]; then
             echo "Found APK: $APK_FILE"
             cp "$APK_FILE" ./nexus-android.apk
-          else
-            echo "No APK found"
           fi
 
       - uses: actions/upload-artifact@v4
@@ -100,9 +79,7 @@ jobs:
       - name: Linux-Build-Abhängigkeiten
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            ninja-build libgtk-3-dev liblzma-dev clang cmake pkg-config \
-            libblkid-dev libsecret-1-dev libjsoncpp-dev
+          sudo apt-get install -y             ninja-build libgtk-3-dev liblzma-dev clang cmake pkg-config             libblkid-dev libsecret-1-dev libjsoncpp-dev
 
       - uses: subosito/flutter-action@v2
         with:
@@ -110,36 +87,20 @@ jobs:
           channel: "stable"
           cache: true
 
+      - name: Remove existing linux/ folder to prevent conflicts
+        run: rm -rf linux/
+
       - name: Linux-Ordner erzeugen
         run: |
-          if [ ! -d "linux" ]; then
-            flutter create --platforms=linux --org ${{ env.ORG }} --project-name ${{ env.PROJECT_NAME }} .
-          fi
+          flutter create --platforms=linux --org ${{ env.ORG }} --project-name ${{ env.PROJECT_NAME }} .
 
       - run: flutter pub get
-      # Build with verbose error output
-      - run: |
-          flutter build linux --release 2>&1 | tee /tmp/build_linux.log; echo "EXIT_CODE=$\{PIPESTATUS[0]}"
-          if [ ${PIPESTATUS[0]} -ne 0 ]; then
-            echo "=== BUILD FAILED - showing last 50 lines ==="
-            tail -50 /tmp/build_linux.log
-            echo "=== Searching for errors ==="
-            grep -i "error" /tmp/build_linux.log | tail -20 || true
-            grep -i "failed" /tmp/build_linux.log | tail -20 || true
-            grep -i "exception" /tmp/build_linux.log | tail -20 || true
-          fi
-          exit ${PIPESTATUS[0]}
-
-      - name: Verify Linux build
-        run: |
-          ls -la build/linux/x64/release/ 2>/dev/null || echo "No Linux build directory"
-          find build/linux/ -type f 2>/dev/null || true
+      - run: flutter build linux --release
 
       - name: Linux-Bundle als tar.gz
         run: |
           cd build/linux
           tar -czf ../../nexus-linux-x64.tar.gz x64/release
-          ls -la ../../nexus-linux-x64.tar.gz
 
       - uses: actions/upload-artifact@v4
         with:
@@ -166,14 +127,16 @@ jobs:
           fi
 
       - run: flutter pub get
-      # Flutter 3.41+ supports VS 2026 (version 18) natively.
-      # The windows-latest runner has VS 2026 pre-installed.
       - run: flutter build windows --release
 
       - name: Windows-Bundle als zip
         shell: pwsh
         run: |
-          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath nexus-windows-x64.zip
+          if (Test-Path "build\windows\x64\runner\Release") {
+            Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath nexus-windows-x64.zip
+          } else {
+            Write-Host "Windows build directory not found"
+          }
 
       - uses: actions/upload-artifact@v4
         with:
