@@ -62,4 +62,3 @@ class _WindowsFallbackScreen extends StatelessWidget {
     );
   }
 }
-}
