@@ -69,6 +69,9 @@ jobs:
             sed -i 's/compileSdk [0-9]*/compileSdk 34/g' android/app/build.gradle
           fi
 
+      - name: Dart analyze
+        run: flutter analyze 2>&1 || true
+
       - name: Build APK
         id: build_apk
         run: |
@@ -78,9 +81,19 @@ jobs:
           ls -la android/ 2>&1 || echo "No android/ dir"
           ls -la android/app/ 2>&1 || echo "No android/app/ dir"
           ls -la android/app/build.gradle 2>&1 || echo "No build.gradle"
+          echo "=== Checking build.gradle content ==="
+          cat android/app/build.gradle 2>&1 || echo "No build.gradle"
           echo "=== Running: flutter build apk --release ==="
           flutter build apk --release 2>&1
-          echo "=== Build exit code: $? ==="
+          BUILD_EXIT=$?
+          echo "=== Build exit code: $BUILD_EXIT ==="
+          if [ $BUILD_EXIT -ne 0 ]; then
+            echo "=== BUILD FAILED - checking for errors ==="
+            echo "=== build/ directory contents ==="
+            find build/ -type f 2>/dev/null | head -20 || echo "No build/ dir"
+            echo "=== Looking for error patterns ==="
+            find / -path "*/build/outputs/flutter-apk*" -name "*.apk" 2>/dev/null || true
+          fi
           echo "=== APK files ==="
           find build/ -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
 
@@ -140,11 +153,18 @@ jobs:
           flutter pub get -v 2>&1
           PUB_EXIT=$?
           echo "=== pub get exit code: $PUB_EXIT ==="
+      - name: Dart analyze
+        run: flutter analyze 2>&1 || true
+
       - name: Build Linux
         run: |
           echo "=== Running: flutter build linux --release ==="
           flutter build linux --release 2>&1
-          echo "=== Build exit code: $? ==="
+          BUILD_EXIT=$?
+          echo "=== Build exit code: $BUILD_EXIT ==="
+          if [ $BUILD_EXIT -ne 0 ]; then
+            echo "=== Linux BUILD FAILED ==="
+          fi
 
       - name: Linux-Bundle als tar.gz
         run: |
