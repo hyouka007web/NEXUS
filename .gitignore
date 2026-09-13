@@ -16,7 +16,6 @@ pubspec.lock
 # zusammenpassen. pubspec.yaml und lib/ bleiben davon unberührt, "flutter
 # create ." überschreibt nur fehlende Plattformordner, keine bestehenden
 # Dateien.
-android/
 windows/
 linux/
 

@@ -39,14 +39,23 @@ jobs:
 
       - run: flutter pub get
       
-      # FIX: Lower compileSdkVersion to 34 (Flutter 3.24 may default to 35,
-      #       which may not be available on ubuntu-latest runners)
+      # FIX: Force compileSdkVersion to 34 in all forms
+      # Flutter 3.24 may generate compileSdk 35 which is unavailable on ubuntu-latest
       - name: Set compileSdkVersion to 34
         run: |
           if [ -f "android/app/build.gradle" ]; then
-            # Replace compileSdkVersion with 34, handling all variant forms
-            # Forms: compileSdkVersion 35, compileSdk 35, compileSdk = 35, etc.
-            sed -i "s/compileSdk[a-zA-Z]* = {0,1}[0-9]*/compileSdk 34/g" android/app/build.gradle
+            # Replace compileSdkVersion flutter.compileSdkVersion
+            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' android/app/build.gradle
+            # Replace compileSdk flutter.compileSdk
+            sed -i 's/compileSdk flutter.compileSdk/compileSdk 34/g' android/app/build.gradle
+            # Replace any compileSdk = <number>
+            sed -i 's/compileSdk[s]* = [0-9]*/compileSdk 34/g' android/app/build.gradle
+            # Replace any compileSdkVersion = <number>
+            sed -i 's/compileSdkVersion = [0-9]*/compileSdkVersion 34/g' android/app/build.gradle
+            # Replace compileSdkVersion <number>
+            sed -i 's/compileSdkVersion [0-9]*/compileSdkVersion 34/g' android/app/build.gradle
+            # Replace compileSdk <number>
+            sed -i 's/compileSdk [0-9]*/compileSdk 34/g' android/app/build.gradle
             echo "=== compileSdk after patch ==="
             grep -n "compileSdk" android/app/build.gradle || true
           fi
