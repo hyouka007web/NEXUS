@@ -30,8 +30,14 @@ jobs:
           channel: "stable"
           cache: true
 
+      # FIX: If android/ dir doesn't exist, generate it.
+      # If it already exists, just run pub get and build.
+      # This avoids flutter create failing on re-runs.
       - name: Android-Ordner erzeugen
-        run: flutter create --platforms=android --org ${{ env.ORG }} --project-name ${{ env.PROJECT_NAME }} .
+        run: |
+          if [ ! -d "android/app" ]; then
+            flutter create --platforms=android --org ${{ env.ORG }} --project-name ${{ env.PROJECT_NAME }} .
+          fi
 
       - run: flutter pub get
       - run: flutter build apk --release
@@ -61,7 +67,10 @@ jobs:
           cache: true
 
       - name: Linux-Ordner erzeugen
-        run: flutter create --platforms=linux --org ${{ env.ORG }} --project-name ${{ env.PROJECT_NAME }} .
+        run: |
+          if [ ! -d "linux" ]; then
+            flutter create --platforms=linux --org ${{ env.ORG }} --project-name ${{ env.PROJECT_NAME }} .
+          fi
 
       - run: flutter pub get
       - run: flutter build linux --release
@@ -89,7 +98,11 @@ jobs:
           cache: true
 
       - name: Windows-Ordner erzeugen
-        run: flutter create --platforms=windows --org ${{ env.ORG }} --project-name ${{ env.PROJECT_NAME }} .
+        shell: bash
+        run: |
+          if [ ! -d "windows" ]; then
+            flutter create --platforms=windows --org ${{ env.ORG }} --project-name ${{ env.PROJECT_NAME }} .
+          fi
 
       - run: flutter pub get
       # Flutter 3.41+ supports VS 2026 (version 18) natively.
