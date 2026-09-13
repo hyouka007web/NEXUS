@@ -39,7 +39,11 @@ SingleActivator? parseShortcut(String raw) {
   return SingleActivator(key, control: control, alt: alt, shift: shift, meta: meta);
 }
 
-const _letterKeys = {
+// FIX: 'const' entfernt — LogicalKeyboardKey-Static-Members sind in einigen
+// Flutter/Dart-Versionen nicht als konstante Werte im const-Map-Kontext
+// erlaubt, was einen Kompilierungsfehler verursacht ("Const variables must
+// be initialized with a constant value"). Verwende stattdessen 'final'.
+final _letterKeys = {
   'a': LogicalKeyboardKey.keyA, 'b': LogicalKeyboardKey.keyB, 'c': LogicalKeyboardKey.keyC,
   'd': LogicalKeyboardKey.keyD, 'e': LogicalKeyboardKey.keyE, 'f': LogicalKeyboardKey.keyF,
   'g': LogicalKeyboardKey.keyG, 'h': LogicalKeyboardKey.keyH, 'i': LogicalKeyboardKey.keyI,
@@ -50,7 +54,7 @@ const _letterKeys = {
   'v': LogicalKeyboardKey.keyV, 'w': LogicalKeyboardKey.keyW, 'x': LogicalKeyboardKey.keyX,
   'y': LogicalKeyboardKey.keyY, 'z': LogicalKeyboardKey.keyZ,
 };
-const _digitKeys = {
+final _digitKeys = {
   '0': LogicalKeyboardKey.digit0, '1': LogicalKeyboardKey.digit1, '2': LogicalKeyboardKey.digit2,
   '3': LogicalKeyboardKey.digit3, '4': LogicalKeyboardKey.digit4, '5': LogicalKeyboardKey.digit5,
   '6': LogicalKeyboardKey.digit6, '7': LogicalKeyboardKey.digit7, '8': LogicalKeyboardKey.digit8,
@@ -61,7 +65,7 @@ LogicalKeyboardKey? _keyFor(String name) {
   final n = name.toLowerCase();
   if (_letterKeys.containsKey(n)) return _letterKeys[n];
   if (_digitKeys.containsKey(n)) return _digitKeys[n];
-  const named = {
+  final named = {
     'left': LogicalKeyboardKey.arrowLeft,
     'right': LogicalKeyboardKey.arrowRight,
     'up': LogicalKeyboardKey.arrowUp,

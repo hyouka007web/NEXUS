@@ -327,8 +327,11 @@ class Downloader {
 
   /// Setzt einen pausierten Download fort.
   Future<void> resume(String url) async {
-    final entry = _active[url] ?? _queue.firstWhere((e) => e.url == url, orElse: () => null);
-    if (entry != null) {
+    // FIX: firstWhere orElse must return DownloadEntry, not null.
+    // Wenn nicht gefunden, ist entry null und wir überspringen den Resume-Versuch.
+    final entry = _active[url] ??
+        _queue.firstWhere((e) => e.url == url, orElse: () => DownloadEntry(url: url, destination: '', headers: {}));
+    if (entry != null && entry.url == url) {
       entry.isPaused = false;
       entry.status = DownloadStatus.queued;
       _queue.addLast(entry);
