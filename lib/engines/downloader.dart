@@ -220,7 +220,8 @@ class Downloader {
     final request = await _httpClient.getUrl(Uri.parse(entry.url));
     final ua = config.userAgents[_userAgentIndex % config.userAgents.length];
     _userAgentIndex++;
-    request.headers.userAgent = ua;
+    // FIX: HttpHeaders hat keine userAgent-Property
+    request.headers.set(HttpHeaders.userAgentHeader, ua);
 
     // Resume via Range-Request
     int startByte = 0;

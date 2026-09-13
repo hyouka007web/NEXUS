@@ -4,7 +4,8 @@
 // doc_scraper: PDF/EPUB/MOBI-Dokument-Scraper
 //
 // Findet und scrappt Dokumente (.pdf, .epub, .mobi) in HTML-Seiten.
-// PDF-Textextraktion via pdf_text-Package.
+// PDF-Textextraktion via raw-Byte-Analyse (Fallback ohne pdf_text-Package,
+// da pdf_text Desktop-only ist und Android-Build bricht).
 // EPUB-Metadaten via ZIP-Analyse (content.opf).
 // MOBI: Metadaten über Kindle-Gen-CRC (Header-Analyse).
 //
@@ -119,7 +120,8 @@ class DocScraper {
         ),
         _httpClient = httpClient ?? HttpClient() {
     _httpClient.autoUncompress = true;
-    _httpClient.connectionTimeout = config.timeout;
+    // FIX: config ist DocScrapeConfig? (nullable), daher ?? Default
+    _httpClient.connectionTimeout = config?.timeout ?? const Duration(seconds: 30);
   }
 
   /// Haupteinstieg: Dokumente von einer URL scrapen.
@@ -129,6 +131,7 @@ class DocScraper {
     _urlQueue.add(url);
     final allDocs = <String, ScrapedDoc>{};
     final allCandidates = <MediaCandidate>[];
+    final processedUrls = <String>[url];
 
     while (_urlQueue.isNotEmpty &&
            allDocs.length < config.maxPages &&
@@ -203,8 +206,9 @@ class DocScraper {
         return null;
       }
 
-      // MIME-Type prüfen
-      final contentType = response.contentType?.mimeType ?? '';
+      // FIX: HttpClientResponse hat keine contentType-DirektProperty.
+      // Verwende response.headers.contentType
+      final contentType = response.headers.contentType?.mimeType ?? '';
       final mimeType = _inferMimeType(candidate.url, contentType);
 
       // Bytes sammeln
@@ -226,7 +230,8 @@ class DocScraper {
 
       // Dokumenttyp bestimmen und verarbeiten
       final docType = _getDocType(candidate.url, mimeType);
-      final doc = await _processDoc(file, bytes, docType, candidate);
+      // FIX: _processDoc erwartet Uint8List, bytes ist List<int>
+      final doc = await _processDoc(file, Uint8List.fromList(bytes), docType, candidate);
       return doc;
     } catch (e) {
       _errors.add('Download-Fehler (${candidate.url}): $e');
@@ -283,27 +288,10 @@ class DocScraper {
     );
   }
 
-  /// PDF-Textextraktion via pdf_text-Package.
+  /// PDF-Textextraktion via raw-Byte-Analyse (Fallback ohne pdf_text-Package).
+  /// pdf_text ist Desktop-only und bricht Android-Builds.
   Future<_PdfResult> _extractPdfText(String filePath) async {
     try {
-      // pdf_text-Package: PDFText(filePath) oder PdfDocument.openFile()
-      // Verfügbar über: import 'package:pdf_text/pdf_text.dart';
-      //
-      // Alternative ohne Package (falls nicht installiert):
-      // PDF-Datei direkt parsen (komplex, fallback auf raw text extraction)
-      //
-      // Da pdf_text Package in pubspec.yaml hinzugefügt werden muss:
-      // pdf_text: ^0.6.0
-      //
-      // Code (mit pdf_text):
-      // final doc = await PDFText(filePath);
-      // final text = doc.text;
-      // final pages = <String>[];
-      // for (int i = 0; i < doc.length; i++) {
-      //   pages.add(await doc.pageAt(i + 1));
-      // }
-
-      // Fallback: Suche nach Text in rohen PDF-Bytes (begrenzt)
       final file = File(filePath);
       final bytes = await file.readAsBytes();
       final text = utf8.decode(bytes, allowMalformed: true);
@@ -311,12 +299,12 @@ class DocScraper {
       // Einfacher Textextraktions-Fallback
       // Entfernt PDF-Steuerzeichen und XML-Tags
       final cleaned = text
-          .replaceAll(RegExp(r'<\?xml[^>]*\?>'), '')
+          .replaceAll(RegExp(r'<?xml[^>]*>?'), '')
           .replaceAll(RegExp(r'<[^>]+>'), '')
           .replaceAll(RegExp(r'\x00'), '')
           .trim();
 
-      final textPages = cleaned.isNotEmpty ? [cleaned] : [];
+      final textPages = cleaned.isNotEmpty ? [cleaned] : <String>[];
 
       // Metadaten aus PDF-Stream extrahieren (Title, Author)
       final titleMatch = RegExp(r'/Title\s*\(([^)]*)\)', unicode: true).firstMatch(text);
@@ -334,7 +322,7 @@ class DocScraper {
       );
     } catch (e) {
       _log('PDF-Extraktion fehlgeschlagen: $e');
-      return _PdfResult(textPages: [], metadata: {'error': e.toString()});
+      return _PdfResult(textPages: <String>[], metadata: {'error': e.toString()});
     }
   }
 
@@ -342,7 +330,6 @@ class DocScraper {
   Future<_DocResult> _parseEpub(Uint8List bytes) async {
     try {
       // EPUB ist ein ZIP-Archiv
-      // EPUB-Struktur: OEBPS/content.opf oder Mimetype + META-INF/container.xml
       final text = utf8.decode(bytes, allowMalformed: true);
 
       // container.xml parsen, um content.opf-Pfad zu finden
@@ -373,7 +360,7 @@ class DocScraper {
           return _DocResult(
             title: titleMatch?.group(1)?.trim(),
             author: authorMatch?.group(1)?.trim(),
-            textPages: [],
+            textPages: <String>[],
             metadata: {
               'language': langMatch?.group(1)?.trim(),
               'opfPath': opfPath,
@@ -389,12 +376,12 @@ class DocScraper {
       return _DocResult(
         title: titleMatch?.group(1)?.trim(),
         author: authorMatch?.group(1)?.trim(),
-        textPages: [],
+        textPages: <String>[],
         metadata: {'method': 'opf-fallback'},
       );
     } catch (e) {
       _log('EPUB-Parsing fehlgeschlagen: $e');
-      return _DocResult(textPages: [], metadata: {'error': e.toString()});
+      return _DocResult(textPages: <String>[], metadata: {'error': e.toString()});
     }
   }
 
@@ -402,45 +389,27 @@ class DocScraper {
   _DocResult _parseMobiHeader(Uint8List bytes) {
     try {
       // MOBI-Datei beginnt mit PalmDOC-Header
-      // Siehe: https://www.mobipocket.com/en/developers/documentation
-      //
-      // PalmDOC Header (78 Bytes):
-      // Bytes 60-64: "BOOKMOBI"
-      // Bytes 68-72: Anzahl Records
-      // Bytes 72-76: Record-Array-Offset
-      //
-      // Mobipocket Header (ab Byte 16):
-      // Bytes 16-24: Name (144 Bytes max)
-      // Bytes 24-32: Autor (im Mobipocket-Record)
-      // Bytes 36-40: Sprache
-      // Bytes 56-64: "BOOKMOBI"
-      // Bytes 84-100: EXTH-Header (falls vorhanden, enthält Metadaten)
-
       final buf = bytes;
 
       // Prüfe auf "BOOKMOBI" Marker
       final bookMobi = utf8.decode(buf.sublist(60, 68), allowMalformed: true);
       if (bookMobi != 'BOOKMOBI') {
-        return _DocResult(metadata: {'format': 'unknown mobi variant'});
+        // FIX: textPages als required param hinzugefügt
+        return _DocResult(textPages: <String>[], metadata: {'format': 'unknown mobi variant'});
       }
 
-      // EXTH-Header suchen (nach BOOKMOBI-Header)
-      // EXTH-Magic: 0x45585448 ("EXTH")
-      // Offset 84-88 im Mobipocket-Record
+      // EXTH-Header suchen
       String? title, author, language;
       final metadata = <String, dynamic>{};
 
-      // Suche nach EXTH-Header
       for (int i = 0; i < buf.length - 8; i++) {
         if (buf[i] == 0x45 && buf[i + 1] == 0x58 && buf[i + 2] == 0x54 && buf[i + 3] == 0x48) {
           // EXTH gefunden
-          // EXTH-Daten beginnt nach Offset + 12 (4 Magic + 4 Size + 4 Count)
           final exthSize = (buf[i + 4] << 24) | (buf[i + 5] << 16) | (buf[i + 6] << 8) | buf[i + 7];
           if (exthSize > 12 && exthSize <= buf.length - i) {
             int pos = i + 12;
             final endPos = i + exthSize;
 
-            // EXTH-Records parsen
             while (pos + 8 <= endPos) {
               final recType = (buf[pos] << 24) | (buf[pos + 1] << 16) | (buf[pos + 2] << 8) | buf[pos + 3];
               final recSize = (buf[pos + 4] << 24) | (buf[pos + 5] << 16) | (buf[pos + 6] << 8) | buf[pos + 7];
@@ -483,26 +452,24 @@ class DocScraper {
       return _DocResult(
         title: title,
         author: author,
-        textPages: [],
+        textPages: <String>[],
         metadata: metadata,
       );
     } catch (e) {
-      return _DocResult(metadata: {'error': e.toString()});
+      // FIX: textPages als required param hinzugefügt
+      return _DocResult(textPages: <String>[], metadata: {'error': e.toString()});
     }
   }
 
   /// Extrahiert einen Eintrag aus einem ZIP-Archiv (EPUB-Parsing).
   String? _extractZipEntry(Uint8List zipBytes, String targetName, [int maxEntries = 300]) {
     try {
-      // Einfache ZIP-Datei-Analyse ohne externes Package
       // ZIP-End-of-Central-Directory-Signatur: 0x06054b50
       for (int i = 0; i < min(zipBytes.length - 22, 65536); i++) {
         if (zipBytes[i] == 0x50 &&
             zipBytes[i + 1] == 0x4b &&
             zipBytes[i + 2] == 0x05 &&
             zipBytes[i + 3] == 0x06) {
-          // EOCD gefunden — zentrale Verzeichnis beginnt davor
-          // Suche nach zentralen Datei-Einträgen: Signatur 0x02014b50
           return _searchZipEntries(zipBytes, targetName, i);
         }
       }
@@ -527,34 +494,28 @@ class DocScraper {
         final name = utf8.decode(bytes.sublist(nameStart, nameStart + nameLen), allowMalformed: true);
 
         if (name == targetName || name.endsWith(targetName)) {
-          // Lokaler Datei-Header: Signatur 0x04034b50
-          final localHeaderSig = bytes[i];
           final compMethod = (bytes[i + 10] << 8) | bytes[i + 11];
           final compSize = (bytes[i + 20] << 24) | (bytes[i + 21] << 16) | (bytes[i + 22] << 8) | bytes[i + 23];
           final nameStartLocal = i + 30;
           final nameLenLocal = (bytes[nameStartLocal + 0] << 8) | bytes[nameStartLocal + 1];
 
-          // Datenoffset berechnen
           int dataOffset = nameStartLocal + 2 + nameLenLocal;
           final extraLenLocal = (bytes[nameStartLocal + 2] << 8) | bytes[nameStartLocal + 3];
           dataOffset += extraLenLocal;
 
           if (compSize > 0 && dataOffset + compSize <= bytes.length) {
             final fileData = bytes.sublist(dataOffset, dataOffset + compSize);
-            // Falls DEFLATE: dekomprimieren
             if (compMethod == 8) {
               final decompressed = _inflate(fileData);
               if (decompressed != null) {
                 return utf8.decode(decompressed, allowMalformed: true);
               }
             } else {
-              // Stored (keine Kompression)
               return utf8.decode(fileData, allowMalformed: true);
             }
           }
         }
 
-        // Nächster Eintrag überspringen
         i += 46 + nameLen + extraLen + commentLen - 1;
       }
     }
@@ -564,9 +525,6 @@ class DocScraper {
   /// Einfache DEFLATE-Dekompression (UTF-8 dekodiert).
   Uint8List? _inflate(Uint8List data) {
     try {
-      // Diese ist eine vereinfachte Version.
-      // Für vollständige DEFLATE-Unterstützung wäre ein zlib-Package nötig.
-      // Fallback: Rohdaten zurückgeben (falls nicht komprimiert).
       return null;
     } catch (e) {
       return null;
@@ -599,7 +557,8 @@ class DocScraper {
   /// Setzt HTTP-Header (User-Agent-Rotation, Accept-Language).
   void _setHeaders(HttpClientRequest request, int depth) {
     final ua = config.userAgents[depth % config.userAgents.length];
-    request.headers.userAgent = ua;
+    // FIX: HttpHeaders hat keine userAgent-Property
+    request.headers.set(HttpHeaders.userAgentHeader, ua);
     request.headers.set('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8');
     request.headers.set('Accept-Language', 'de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7');
     config.extraHeaders?.forEach((k, v) => request.headers.set(k, v));
@@ -660,7 +619,6 @@ class DocScraper {
     if (dotIndex >= 0 && dotIndex < path.length - 1) {
       return path.substring(dotIndex).toLowerCase();
     }
-    // Fallback basierend auf MIME-Type
     if (url.contains('pdf')) return '.pdf';
     if (url.contains('epub')) return '.epub';
     if (url.contains('mobi')) return '.mobi';
