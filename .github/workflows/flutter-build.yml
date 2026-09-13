@@ -87,12 +87,12 @@ jobs:
           channel: "stable"
           cache: false
 
-      - name: Remove existing linux/ folder to prevent conflicts
-        run: rm -rf linux/
-
       - name: Linux-Ordner erzeugen
         run: |
-          flutter create --platforms=linux .
+          flutter create --platforms=linux . || (
+            echo "flutter create failed, trying with force..."
+            flutter create --platforms=linux -f .
+          )
 
       - run: flutter pub get
       - run: flutter build linux --release
