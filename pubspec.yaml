@@ -1,21 +1,5 @@
 name: nexus_flutter
-description: >
-  NEXUS (Flutter). Android: vollständige Browser-Oberfläche — Tabs (mit
-  Persistenz), Adressleiste, Sidebar, native Dashboard-Startseite
-  (Quick-Links, Status-Zeile), Redirect-/Ad-Shield, Netzwerk-Sniffer
-  (fetch/XHR-Hooking per JS-Injection, findet auch Video-URLs, die nie ins
-  DOM geschrieben werden), Mediathek, Downloads-Panel (nicht-blockierend
-  über die Kommandozentrale erreichbar) und DevTools (Sniffer-Log,
-  User-Agent-Switcher, Cookie-Manager, nutzereigene Domain-Skripte),
-  Harvester-Debug-Pane (Live-Log pro Erkennungsschritt, DOM-Snapshot) und
-  einen Testfälle-Screen mit 5 öffentlichen Referenzseiten (YouTube, Vimeo,
-  einfache HTML5-Video-Seite, HLS-Demo, DASH-Demo) zum gezielten
-  Nachvollziehen von Erkennungsproblemen.
-  Windows/Linux: einfachere Vorstufe bis sie ihr eigenes, zur jeweiligen
-  WebView-API passendes Äquivalent bekommen. Scraper/Video-
-  Harvester/Downloader sind reines Dart ohne Plattform-Channel und laufen
-  unverändert auf allen drei Plattformen; die regex-lastigen Teile laufen
-  über compute() in einem eigenen Isolate statt den UI-Thread zu blockieren.
+description: NEXUS Flutter Browser
 publish_to: 'none'
 version: 0.1.0+1
 
@@ -26,27 +10,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-
-  # Android: offizielles Paket, nutzt Androids System-WebView (Chromium).
-  # v4.x ist die aktuell gepflegte Version — v3.0.4 (früher hier gepinnt)
-  # zieht eine so alte webview_flutter_android-Version, dass deren AAR noch
-  # keinen "namespace" deklariert und an modernen Android-Gradle-Plugin-
-  # Versionen mit "Namespace not specified" scheitert. Das war der Grund
-  # für den ersten CI-Fehlschlag hier.
   webview_flutter: ^4.14.1
-
-  # Windows: separates Community-Paket (WebView2 / Edge-Chromium). Hat eine
-  # ANDERE API als webview_flutter (eigenes Widget, kein WebViewController).
-  # Deaktiviert wegen Kompatibilitätsproblemen mit CI-Build.
-  # webview_windows: ^0.4.0
-
-  # Linux: KEIN WebView-Paket mehr hier — siehe README, Abschnitt "Linux
-  # pausiert". flutter_linux_webview war an die alte webview_flutter-3.0.4-
-  # API gekettet und daher inkompatibel mit dem Upgrade auf 4.x oben; eine
-  # gepflegte Alternative für Linux+CEF gibt es aktuell nicht.
-
-  # Für den Video-Downloader: app-privates Speicherverzeichnis, plattform-
-  # unabhängig (entspricht Kotlins context.filesDir).
   path_provider: ^2.1.0
 
 dev_dependencies:

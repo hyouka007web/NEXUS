@@ -28,7 +28,7 @@ jobs:
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: "stable"
-          cache: true
+          cache: false
 
       # FIX: Remove existing android/ folder to prevent flutter create conflicts
       # Then generate a fresh one
@@ -85,7 +85,7 @@ jobs:
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: "stable"
-          cache: true
+          cache: false
 
       - name: Remove existing linux/ folder to prevent conflicts
         run: rm -rf linux/
@@ -117,7 +117,7 @@ jobs:
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: "stable"
-          cache: true
+          cache: false
 
       - name: Windows-Ordner erzeugen
         shell: bash
