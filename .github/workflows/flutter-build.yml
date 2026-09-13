@@ -35,7 +35,7 @@ jobs:
       - name: Android-Ordner erzeugen
         run: |
           rm -rf android/
-          flutter create --platforms=android --org ${{ env.ORG }} --project-name ${{ env.PROJECT_NAME }} .
+          flutter create --platforms=android .
           echo "=== Generated build.gradle ==="
           grep "compileSdk" android/app/build.gradle || true
 
@@ -92,7 +92,7 @@ jobs:
 
       - name: Linux-Ordner erzeugen
         run: |
-          flutter create --platforms=linux --org ${{ env.ORG }} --project-name ${{ env.PROJECT_NAME }} .
+          flutter create --platforms=linux .
 
       - run: flutter pub get
       - run: flutter build linux --release
@@ -123,7 +123,7 @@ jobs:
         shell: bash
         run: |
           if [ ! -d "windows" ]; then
-            flutter create --platforms=windows --org ${{ env.ORG }} --project-name ${{ env.PROJECT_NAME }} .
+            flutter create --platforms=windows .
           fi
 
       - run: flutter pub get
