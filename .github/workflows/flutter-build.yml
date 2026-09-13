@@ -67,10 +67,8 @@ jobs:
 
       - name: Build APK
         run: |
-          set +e
           flutter build apk --release 2>&1
-          BUILD_EXIT=$?
-          echo "=== build exit code: $BUILD_EXIT ==="
+          echo "=== Build completed ==="
           echo "=== APK files ==="
           find build/ -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
 
@@ -132,10 +130,8 @@ jobs:
           echo "=== pub get exit code: $PUB_EXIT ==="
       - name: Build Linux
         run: |
-          set +e
           flutter build linux --release 2>&1
-          BUILD_EXIT=$?
-          echo "=== build exit code: $BUILD_EXIT ==="
+          echo "=== Build completed ==="
 
       - name: Linux-Bundle als tar.gz
         run: |
