@@ -253,7 +253,9 @@ class HtmlExtractor {
     }
 
     // Content-Type analysieren
-    final contentType = response.contentType?.mimeType ?? '';
+    // FIX: dart:io HttpClientResponse hat keine contentType-DirektProperty.
+    // Verwende response.headers.contentType
+    final contentType = response.headers.contentType?.mimeType ?? '';
     final body = await response.transform(utf8.decoder).join();
     final result = _parseByContentType(url, body, contentType);
 
