@@ -35,9 +35,15 @@ jobs:
       - name: Android-Ordner erzeugen
         run: |
           rm -rf android/
-          flutter create --platforms=android .
+          echo "=== Running flutter create --platforms=android ==="
+          set +e
+          flutter create --platforms=android . 2>&1
+          FLUTTER_EXIT=$?
+          echo "=== flutter create exit code: $FLUTTER_EXIT ==="
+          echo "=== Checking android dir ==="
+          ls -la android/ 2>&1 || echo "android/ dir not created"
           echo "=== Generated build.gradle ==="
-          grep "compileSdk" android/app/build.gradle || true
+          grep "compileSdk" android/app/build.gradle 2>&1 || true
 
       - run: flutter pub get
 
