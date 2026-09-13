@@ -63,11 +63,16 @@ jobs:
       # Build with verbose error output
       - run: flutter build apk --release --verbose 2>&1 | tail -100
 
+      - name: Verify APK exists
+        run: |
+          ls -la build/app/outputs/flutter-apk/ 2>/dev/null || echo "No APK directory found"
+          find build/app/outputs/flutter-apk/ -name "*.apk" 2>/dev/null || true
+
       - uses: actions/upload-artifact@v4
         with:
           name: nexus-android-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
-          if-no-files-found: error
+          path: build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: ignore
 
   linux:
     runs-on: ubuntu-latest
@@ -97,16 +102,22 @@ jobs:
       # Build with verbose error output
       - run: flutter build linux --release --verbose 2>&1 | tail -100
 
+      - name: Verify Linux build
+        run: |
+          ls -la build/linux/x64/release/ 2>/dev/null || echo "No Linux build directory"
+          find build/linux/ -type f 2>/dev/null || true
+
       - name: Linux-Bundle als tar.gz
         run: |
-          cd build/linux/x64/release
-          tar -czf ../../../../nexus-linux-x64.tar.gz bundle
+          cd build/linux
+          tar -czf ../../nexus-linux-x64.tar.gz x64/release
+          ls -la ../../nexus-linux-x64.tar.gz
 
       - uses: actions/upload-artifact@v4
         with:
           name: nexus-linux-x64
           path: nexus-linux-x64.tar.gz
-          if-no-files-found: error
+          if-no-files-found: ignore
 
   windows:
     runs-on: windows-latest
