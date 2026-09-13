@@ -33,7 +33,7 @@ dependencies:
   # keinen "namespace" deklariert und an modernen Android-Gradle-Plugin-
   # Versionen mit "Namespace not specified" scheitert. Das war der Grund
   # für den ersten CI-Fehlschlag hier.
-  webview_flutter: ^4.10.0
+  webview_flutter: ^4.14.1
 
   # Windows: separates Community-Paket (WebView2 / Edge-Chromium). Hat eine
   # ANDERE API als webview_flutter (eigenes Widget, kein WebViewController).
