@@ -66,25 +66,19 @@ jobs:
           fi
 
       - name: Build APK
+        id: build_apk
         run: |
-          set +e
-          flutter build apk --release > /tmp/apk-build.log 2>&1 || true
+          echo "=== Flutter version ==="
+          flutter --version
+          echo "=== Checking android dir ==="
+          ls -la android/ 2>&1 || echo "No android/ dir"
+          ls -la android/app/ 2>&1 || echo "No android/app/ dir"
+          ls -la android/app/build.gradle 2>&1 || echo "No build.gradle"
+          echo "=== Running: flutter build apk --release ==="
+          flutter build apk --release 2>&1
           echo "=== Build exit code: $? ==="
-          cp /tmp/apk-build.log /tmp/build-log.txt
-          echo "=== All files in build dir ==="
-          ls -la /tmp/apk-build.log
-          wc -l /tmp/apk-build.log
-          echo "=== Full build log ==="
-          cat /tmp/apk-build.log
           echo "=== APK files ==="
           find build/ -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
-
-      - name: Upload build log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-build-log
-          path: /tmp/build-log.txt
 
       - name: Find and Upload APK
         run: |
@@ -144,12 +138,9 @@ jobs:
           echo "=== pub get exit code: $PUB_EXIT ==="
       - name: Build Linux
         run: |
-          set +e
-          flutter build linux --release > /tmp/linux-build.log 2>&1
-          BUILD_EXIT=$?
-          echo "=== Build exit code: $BUILD_EXIT ==="
-          echo "=== Full build log ==="
-          cat /tmp/linux-build.log
+          echo "=== Running: flutter build linux --release ==="
+          flutter build linux --release 2>&1
+          echo "=== Build exit code: $? ==="
 
       - name: Linux-Bundle als tar.gz
         run: |
