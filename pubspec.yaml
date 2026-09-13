@@ -37,7 +37,8 @@ dependencies:
 
   # Windows: separates Community-Paket (WebView2 / Edge-Chromium). Hat eine
   # ANDERE API als webview_flutter (eigenes Widget, kein WebViewController).
-  webview_windows: ^0.4.0
+  # Deaktiviert wegen Kompatibilitätsproblemen mit CI-Build.
+  # webview_windows: ^0.4.0
 
   # Linux: KEIN WebView-Paket mehr hier — siehe README, Abschnitt "Linux
   # pausiert". flutter_linux_webview war an die alte webview_flutter-3.0.4-

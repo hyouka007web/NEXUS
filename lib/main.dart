@@ -2,7 +2,6 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:webview_windows/webview_windows.dart' as win;
 
 import 'screens/browser_screen.dart';
 import 'screens/tools_test_screen.dart';
@@ -49,66 +48,18 @@ class _NexusFlutterAppState extends State<NexusFlutterApp> {
   }
 }
 
-/// Windows-Übergangslösung: einzelne WebView ohne Tabs/Sidebar/Adblock,
-/// plus Zugang zum Werkzeug-Test. Wird ersetzt, sobald Windows sein eigenes
-/// BrowserScreen-Äquivalent auf Basis von webview_windows' API bekommt.
-class _WindowsFallbackScreen extends StatefulWidget {
+/// Windows-Fallback: zeigt einen einfachen Platzhalter an.
+/// Windows WebView-Implementierung ist deaktiviert (webview_windows entfernt).
+class _WindowsFallbackScreen extends StatelessWidget {
   const _WindowsFallbackScreen();
 
   @override
-  State<_WindowsFallbackScreen> createState() =>
-      _WindowsFallbackScreenState();
-}
-
-class _WindowsFallbackScreenState extends State<_WindowsFallbackScreen> {
-  win.WebviewController? _controller;
-  String _status = 'Lädt…';
-
-  @override
-  void initState() {
-    super.initState();
-    _init();
-  }
-
-  Future<void> _init() async {
-    final controller = win.WebviewController();
-    try {
-      await controller.initialize();
-      await controller.loadUrl(testUrl);
-      setState(() {
-        _controller = controller;
-        _status = 'Geladen (Windows/WebView2) — Tabs/Sidebar folgen noch';
-      });
-    } catch (error) {
-      setState(() => _status = 'Fehler beim Initialisieren: $error');
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller?.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final controller = _controller;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('NEXUS · $_status'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.build_circle_outlined),
-            tooltip: 'Scraper / Video Harvester testen',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const ToolsTestScreen()),
-            ),
-          ),
-        ],
+    return const Scaffold(
+      body: Center(
+        child: Text('Windows WebView wird noch nicht unterstützt.'),
       ),
-      body: controller == null
-          ? const Center(child: CircularProgressIndicator())
-          : win.Webview(controller),
     );
   }
+}
 }
