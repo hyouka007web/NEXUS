@@ -68,19 +68,13 @@ jobs:
       - name: Build APK
         run: |
           set +e
-          flutter build apk --release 2>&1 > /tmp/build-log.txt || true
-          echo "=== Build exit code: $? ==="
-          echo "=== Last 50 lines of build output ==="
-          tail -50 /tmp/build-log.txt
+          flutter build apk --release > /tmp/apk-build.log 2>&1
+          BUILD_EXIT=$?
+          echo "=== Build exit code: $BUILD_EXIT ==="
+          echo "=== Full build log ==="
+          cat /tmp/apk-build.log
           echo "=== APK files ==="
           find build/ -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
-
-      - name: Upload build log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log-android
-          path: /tmp/build-log.txt
 
       - name: Find and Upload APK
         run: |
@@ -141,17 +135,11 @@ jobs:
       - name: Build Linux
         run: |
           set +e
-          flutter build linux --release 2>&1 > /tmp/build-log-linux.txt || true
-          echo "=== Build exit code: $? ==="
-          echo "=== Last 50 lines of build output ==="
-          tail -50 /tmp/build-log-linux.txt
-
-      - name: Upload build log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log-linux
-          path: /tmp/build-log-linux.txt
+          flutter build linux --release > /tmp/linux-build.log 2>&1
+          BUILD_EXIT=$?
+          echo "=== Build exit code: $BUILD_EXIT ==="
+          echo "=== Full build log ==="
+          cat /tmp/linux-build.log
 
       - name: Linux-Bundle als tar.gz
         run: |
