@@ -52,6 +52,10 @@ jobs:
           PUB_EXIT=$?
           echo "=== pub get exit code: $PUB_EXIT ==="
 
+      # Clean any cached build state
+      - name: Clean
+        run: flutter clean
+
       # FIX: Lower compileSdkVersion to 34 (Flutter 3.24 may default to 35,
       #       which may not be installed on ubuntu-latest runners)
       - name: Set compileSdkVersion to 34
