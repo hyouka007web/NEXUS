@@ -62,8 +62,17 @@ jobs:
 
       # Build with verbose error output
       - run: |
-          set -o pipefail
-          flutter build apk --release --verbose 2>&1 | tee /tmp/build_apk.log | tail -100
+          flutter build apk --release 2>&1 | tee /tmp/build_apk.log; echo "EXIT_CODE=$\{PIPESTATUS[0]}"
+          if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            echo "=== BUILD FAILED - showing last 50 lines ==="
+            tail -50 /tmp/build_apk.log
+            echo "=== Searching for errors ==="
+            grep -i "error" /tmp/build_apk.log | tail -20 || true
+            grep -i "failed" /tmp/build_apk.log | tail -20 || true
+            grep -i "exception" /tmp/build_apk.log | tail -20 || true
+            grep -i "e:/" /tmp/build_apk.log | tail -20 || true
+          fi
+          exit ${PIPESTATUS[0]}
 
       - name: Find APK
         run: |
@@ -110,8 +119,16 @@ jobs:
       - run: flutter pub get
       # Build with verbose error output
       - run: |
-          set -o pipefail
-          flutter build linux --release --verbose 2>&1 | tee /tmp/build_linux.log | tail -100
+          flutter build linux --release 2>&1 | tee /tmp/build_linux.log; echo "EXIT_CODE=$\{PIPESTATUS[0]}"
+          if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            echo "=== BUILD FAILED - showing last 50 lines ==="
+            tail -50 /tmp/build_linux.log
+            echo "=== Searching for errors ==="
+            grep -i "error" /tmp/build_linux.log | tail -20 || true
+            grep -i "failed" /tmp/build_linux.log | tail -20 || true
+            grep -i "exception" /tmp/build_linux.log | tail -20 || true
+          fi
+          exit ${PIPESTATUS[0]}
 
       - name: Verify Linux build
         run: |
