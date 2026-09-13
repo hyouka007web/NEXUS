@@ -61,7 +61,9 @@ jobs:
           fi
 
       # Build with verbose error output
-      - run: flutter build apk --release
+      - run: |
+          set -o pipefail
+          flutter build apk --release --verbose 2>&1 | tee /tmp/build_apk.log | tail -100
 
       - name: Find APK
         run: |
@@ -107,7 +109,9 @@ jobs:
 
       - run: flutter pub get
       # Build with verbose error output
-      - run: flutter build linux --release
+      - run: |
+          set -o pipefail
+          flutter build linux --release --verbose 2>&1 | tee /tmp/build_linux.log | tail -100
 
       - name: Verify Linux build
         run: |
