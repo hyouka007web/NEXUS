@@ -45,7 +45,12 @@ jobs:
           echo "=== Generated build.gradle ==="
           grep "compileSdk" android/app/build.gradle 2>&1 || true
 
-      - run: flutter pub get
+      - name: Flutter pub get (Android)
+        run: |
+          set +e
+          flutter pub get -v 2>&1
+          PUB_EXIT=$?
+          echo "=== pub get exit code: $PUB_EXIT ==="
 
       # FIX: Lower compileSdkVersion to 34 (Flutter 3.24 may default to 35,
       #       which may not be installed on ubuntu-latest runners)
@@ -102,7 +107,12 @@ jobs:
           FLUTTER_EXIT=$?
           echo "=== flutter create exit code: $FLUTTER_EXIT ==="
 
-      - run: flutter pub get
+      - name: Flutter pub get (Android)
+        run: |
+          set +e
+          flutter pub get -v 2>&1
+          PUB_EXIT=$?
+          echo "=== pub get exit code: $PUB_EXIT ==="
       - run: flutter build linux --release
 
       - name: Linux-Bundle als tar.gz
@@ -134,7 +144,12 @@ jobs:
             flutter create --platforms=windows .
           fi
 
-      - run: flutter pub get
+      - name: Flutter pub get (Android)
+        run: |
+          set +e
+          flutter pub get -v 2>&1
+          PUB_EXIT=$?
+          echo "=== pub get exit code: $PUB_EXIT ==="
       - run: flutter build windows --release
 
       - name: Windows-Bundle als zip
