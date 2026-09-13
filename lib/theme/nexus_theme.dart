@@ -58,7 +58,7 @@ ThemeData buildNexusTheme() {
       foregroundColor: NexusColors.textPrimary,
       elevation: 0,
     ),
-    cardTheme: const CardThemeData(
+    cardTheme: const CardTheme(
       color: NexusColors.bgSurface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.all(Radius.circular(NexusRadii.panel)),
