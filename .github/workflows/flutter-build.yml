@@ -61,17 +61,24 @@ jobs:
           fi
 
       # Build with verbose error output
-      - run: flutter build apk --release --verbose 2>&1 | tail -100
+      - run: flutter build apk --release
 
-      - name: Verify APK exists
+      - name: Find APK
         run: |
-          ls -la build/app/outputs/flutter-apk/ 2>/dev/null || echo "No APK directory found"
-          find build/app/outputs/flutter-apk/ -name "*.apk" 2>/dev/null || true
+          find build/app/outputs/flutter-apk/ -name "*.apk" -exec ls -la {} \; 2>/dev/null || true
+          # Copy APK to workspace root if found
+          APK_FILE=$(find build/app/outputs/flutter-apk/ -name "*.apk" -print -quit)
+          if [ -n "$APK_FILE" ]; then
+            echo "Found APK: $APK_FILE"
+            cp "$APK_FILE" ./nexus-android.apk
+          else
+            echo "No APK found"
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
           name: nexus-android-apk
-          path: build/app/outputs/flutter-apk/*.apk
+          path: nexus-android.apk
           if-no-files-found: error
 
   linux:
@@ -100,7 +107,7 @@ jobs:
 
       - run: flutter pub get
       # Build with verbose error output
-      - run: flutter build linux --release --verbose 2>&1 | tail -100
+      - run: flutter build linux --release
 
       - name: Verify Linux build
         run: |
