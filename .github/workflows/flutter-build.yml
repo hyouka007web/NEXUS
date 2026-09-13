@@ -67,19 +67,9 @@ jobs:
 
       - name: Build APK
         run: |
-          set +e
-          flutter build apk --release 2>&1 | tee /tmp/build-output.txt
-          BUILD_EXIT=${PIPESTATUS[0]}
-          echo "=== build exit code: $BUILD_EXIT ==="
+          flutter build apk --release 2>&1
           echo "=== APK files ==="
           find build/ -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
-
-      - name: Upload build log on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log-android
-          path: /tmp/build-output.txt
 
       - name: Find and Upload APK
         run: |
@@ -139,17 +129,7 @@ jobs:
           echo "=== pub get exit code: $PUB_EXIT ==="
       - name: Build Linux
         run: |
-          set +e
-          flutter build linux --release 2>&1 | tee /tmp/build-output-linux.txt
-          BUILD_EXIT=${PIPESTATUS[0]}
-          echo "=== build exit code: $BUILD_EXIT ==="
-
-      - name: Upload build log on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log-linux
-          path: /tmp/build-output-linux.txt
+          flutter build linux --release 2>&1
 
       - name: Linux-Bundle als tar.gz
         run: |
