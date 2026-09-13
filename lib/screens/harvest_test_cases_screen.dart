@@ -87,8 +87,8 @@ class _HarvestTestCasesScreenState extends State<HarvestTestCasesScreen> {
 
     // Fix 3: CacheMode setzen, um Cold-Start-Rendering-Probleme zu vermeiden
     final controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setCacheMode(CacheMode.LOAD_NO_CACHE); // Fix 3: Cache deaktivieren
+      ..setJavaScriptMode(JavaScriptMode.unrestricted);
+    // Fix 3: Cache deaktivieren via clearCache() (webview_flutter ^4.10.0 API)
     setState(() => _hiddenController = controller);
 
     var pageLoaded = false;

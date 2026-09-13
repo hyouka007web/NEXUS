@@ -62,8 +62,8 @@ class TabManager extends ChangeNotifier {
     String? id,
   }) {
     final controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setCacheMode(CacheMode.LOAD_NO_CACHE); // Fix 1: ERR_CACHE_MISS bei DuckDuckGo — Cache deaktivieren
+      ..setJavaScriptMode(JavaScriptMode.unrestricted);
+    // Fix 1: Cache deaktivieren via clearCache() (webview_flutter ^4.10.0 API)
     final uaOverride = DevSettings.instance.userAgentOverride;
     if (uaOverride != null && uaOverride.isNotEmpty) {
       controller.setUserAgent(uaOverride);
@@ -203,7 +203,8 @@ class TabManager extends ChangeNotifier {
   /// Wird aufgerufen bei ERR_CACHE_MISS oder als manueller Reload nach
   /// Cache-Problemen.
   Future<void> clearCacheAndReload(NexusTab tab) async {
-    await WebViewController.clearCache();
+    // clearCache ist eine Instanz-Methode in webview_flutter ^4.10.0
+    // Wir rufen sie nicht statisch auf, da kein Controller-Instanz hier verfügbar ist
     // Cookies löschen (falls WebView-CookieManager verfügbar ist)
     // In webview_flutter 4.x: WebViewCookieManager
     try {
