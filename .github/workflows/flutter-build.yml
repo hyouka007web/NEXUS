@@ -90,7 +90,11 @@ jobs:
       - name: Linux-Ordner erzeugen
         run: |
           rm -rf linux/
+          echo "=== Running flutter create ==="
+          set +e
           flutter create --platforms=linux . 2>&1
+          FLUTTER_EXIT=$?
+          echo "=== flutter create exit code: $FLUTTER_EXIT ==="
 
       - run: flutter pub get
       - run: flutter build linux --release
