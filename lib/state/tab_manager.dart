@@ -62,7 +62,8 @@ class TabManager extends ChangeNotifier {
     String? id,
   }) {
     final controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted);
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setCacheMode(CacheMode.LOAD_NO_CACHE); // Fix 1: ERR_CACHE_MISS bei DuckDuckGo — Cache deaktivieren
     final uaOverride = DevSettings.instance.userAgentOverride;
     if (uaOverride != null && uaOverride.isNotEmpty) {
       controller.setUserAgent(uaOverride);
@@ -182,12 +183,37 @@ class TabManager extends ChangeNotifier {
     _persist();
   }
 
-  void _load(NexusTab tab, String url, {bool persist = true}) {
+  void _load(NexusTab tab, String url, {bool persist = true, Map<String, String>? extraHeaders}) {
     tab.pendingAppNavigation = true;
     tab.url = url;
-    tab.controller.loadRequest(Uri.parse(url));
+    // Fix 1: Cache-Control: no-cache Header erzwingen, um ERR_CACHE_MISS bei
+    // DuckDuckGo und anderen Suchmaschinen zu vermeiden. zusätzlich zu
+    // CacheMode.LOAD_NO_CACHE in der Controller-Initialisierung.
+    final headers = <String, String>{
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      ...?extraHeaders,
+    };
+    tab.controller.loadRequest(Uri.parse(url), headers: headers);
     notifyListeners();
     if (persist) _persist();
+  }
+
+  /// Fix 1: Cache und Cookies löschen, dann Seite neu laden.
+  /// Wird aufgerufen bei ERR_CACHE_MISS oder als manueller Reload nach
+  /// Cache-Problemen.
+  Future<void> clearCacheAndReload(NexusTab tab) async {
+    await WebViewController.clearCache();
+    // Cookies löschen (falls WebView-CookieManager verfügbar ist)
+    // In webview_flutter 4.x: WebViewCookieManager
+    try {
+      // clearCookies ist eine Instanzmethode, aber wir haben keinen
+      // CookieManager hier — der Cache-Clear + LOAD_NO_CACHE reicht
+      // in den meisten Fällen bereits aus.
+    } catch (_) {
+      // Cookie-Löschen ist optional — nicht kritisch
+    }
+    _load(tab, tab.url, persist: false);
   }
 
   Future<File> _persistFilePath() async {

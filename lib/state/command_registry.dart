@@ -10,6 +10,7 @@ class NexusCommands {
   static const forward='browser.forward';
   static const reload='browser.reload';
   static const harvest='browser.harvest';
+  static const deepScrape='browser.deepScrape'; // Fix 4: Deep-Scrape (PDF/EPUB/Video) Befehls-ID
   static const splitVertical='pane.splitVertical';
   static const splitHorizontal='pane.splitHorizontal';
   static const terminal='pane.terminal';

@@ -169,6 +169,47 @@ class _BrowserScreenState extends State<BrowserScreen> {
     }
   }
 
+  // Fix 4: Deep-Scrape mit Doc-Harvester (PDF/EPUB/MOBI) in das Browser-UI integrieren
+  Future<void> _runDeepScraper() async {
+    final tab = _tabManager.activeTab;
+    if (tab == null || tab.isHome) {
+      _showNotification('Erst eine Seite öffnen');
+      return;
+    }
+    HarvestLogger.instance.start(tab.url);
+    _showNotification('Tiefe Analyse läuft…', duration: const Duration(seconds: 60));
+    try {
+      final result = await ScraperEngine.deepScrape(
+        tab.url,
+        mediathekDir: await _getMediathekDir(),
+      );
+      HarvestLogger.instance.log(
+        'ergebnis',
+        '${result.videos.length} Videos, ${result.docs.length} Dokumente, ${result.candidates.length} Kandidaten',
+      );
+      HarvestLogger.instance.finish(success: true);
+      _showNotification(
+        '${result.videos.length} Videos · ${result.docs.length} Docs · ${result.candidates.length} Kandidaten',
+        actionLabel: 'DEBUG',
+        onAction: () => _paneManager.setKind(PaneKind.harvesterDebug),
+      );
+    } catch (e) {
+      HarvestLogger.instance.log('fehler', '$e', level: HarvestLogLevel.error);
+      HarvestLogger.instance.finish(success: false);
+      _showNotification('Tiefe Analyse fehlgeschlagen: $e');
+    }
+  }
+
+  // Fix 4: Mediathek-Verzeichnis ermitteln für DocScraper
+  Future<String> _getMediathekDir() async {
+    try {
+      final dir = await VideoDownloader.downloadsDir();
+      return dir.path;
+    } catch (_) {
+      return 'mediathek';
+    }
+  }
+
   void _showScrapeDetails(ScrapeResult result) {
     showModalBottomSheet(
       context: context,
@@ -579,6 +620,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
         NexusCommands.forward: _tabManager.goForward,
         NexusCommands.reload: _tabManager.reload,
         NexusCommands.harvest: _runHarvester,
+        NexusCommands.deepScrape: _runDeepScraper, // Fix 4: Deep-Scrape Command-Callback
         NexusCommands.splitVertical: _splitVertical,
         NexusCommands.splitHorizontal: _splitHorizontal,
         NexusCommands.terminal: () => _paneManager.setKind(PaneKind.terminal),
@@ -822,6 +864,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
   List<PaletteItem> _paletteItems() => [
     PaletteItem('Video Harvester starten','Actions',Icons.video_collection_outlined,_runHarvester,commandId:NexusCommands.harvest),
     PaletteItem('Komplett-Analyse starten','Actions',Icons.travel_explore,_runScraper,commandId:'scraper.run'),
+    PaletteItem('Deep Scraper (Videos+Docs)','Actions',Icons.document_scanner,_runDeepScraper,commandId:'scraper.deep'),
     PaletteItem('Neuer Tab','Actions',Icons.add,_newTabInPane,commandId:NexusCommands.newTab),
     PaletteItem('Zurück','Actions',Icons.arrow_back,_tabManager.goBack,commandId:NexusCommands.back),
     PaletteItem('Vor','Actions',Icons.arrow_forward,_tabManager.goForward,commandId:NexusCommands.forward),
@@ -1071,6 +1114,8 @@ class _BrowserScreenState extends State<BrowserScreen> {
                 Icons.travel_explore, 'Komplett-Analyse', _runScraper),
             _sidebarItem(
                 Icons.video_collection_outlined, 'Video Harvester', _runHarvester),
+            _sidebarItem(
+                Icons.document_scanner, 'Deep Scraper (Docs+Videos)', _runDeepScraper), // Fix 4: PDF/EPUB-Harvester im Menü
             const Divider(color: NexusColors.border),
             _sidebarItem(Icons.video_library_outlined, 'Mediathek', () {
               Navigator.of(context).push(
@@ -1102,8 +1147,52 @@ class _BrowserScreenState extends State<BrowserScreen> {
         blockedCount: _tabManager.blockedCount,
       );
     }
+    // Fix 3: Loading-Indicator und Fehlerhinweis statt weißem Screen
+    final controller = tab.controller;
+    if (controller == null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline,
+                  size: 48, color: NexusColors.accentDanger),
+              const SizedBox(height: 12),
+              const Text(
+                'WebView-Controller nicht verfügbar.\n'
+                'Starte die App neu oder öffne einen neuen Tab.',
+                style: TextStyle(color: NexusColors.textMuted),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Neuer Tab'),
+                onPressed: _newTabInPane,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return RepaintBoundary(
-      child: _tabManager.activeTab?.controller != null ? WebViewWidget(controller: _tabManager.activeTab!.controller) : const SizedBox.shrink(),
+      child: tab.isLoading
+          ? Stack(
+              children: [
+                WebViewWidget(controller: controller),
+                const Positioned(
+                  top: 8,
+                  right: 8,
+                  child: SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+              ],
+            )
+          : WebViewWidget(controller: controller),
     );
   }
 

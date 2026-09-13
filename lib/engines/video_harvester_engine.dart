@@ -217,6 +217,9 @@ class VideoHarvesterEngine {
         HttpHeaders.acceptHeader,
         'text/html,application/xhtml+xml,application/json,text/plain,*/*;q=0.8',
       );
+      // Fix 2: Cache-Control: no-cache erzwingen für frische Scraper-Ergebnisse
+      request.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+      request.headers.set('Pragma', 'no-cache');
       final response =
           await request.close().timeout(const Duration(seconds: 20));
       final bytes = <int>[];

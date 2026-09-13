@@ -241,6 +241,9 @@ class HtmlExtractor {
     final req = await client.getUrl(Uri.parse(url)).timeout(_timeout);
     req.headers.set(HttpHeaders.userAgentHeader, _userAgents[_depth % _userAgents.length]);
     req.headers.add('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8');
+    // Fix 2: Cache-Control: no-cache für frische Scraper-Ergebnisse
+    req.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    req.headers.set('Pragma', 'no-cache');
     extraHeaders?.forEach((k, v) => req.headers.add(k, v));
 
     final response = await req.close().timeout(_timeout);

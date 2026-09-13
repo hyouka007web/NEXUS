@@ -77,16 +77,29 @@ class _TestRunResult {
 class _HarvestTestCasesScreenState extends State<HarvestTestCasesScreen> {
   final Map<String, _TestRunResult> _results = {};
   WebViewController? _hiddenController;
+  String? _initError; // Fix 3: Fehlermeldung statt weißem Screen bei Cold-Start-Problemen
 
   Future<void> _runTest(HarvestTestCase testCase) async {
-    setState(() => _results[testCase.name] = const _TestRunResult(running: true));
+    setState(() {
+      _results[testCase.name] = const _TestRunResult(running: true);
+      _initError = null; // Fix 3: Fehler zurücksetzen
+    });
 
-    final controller = WebViewController()..setJavaScriptMode(JavaScriptMode.unrestricted);
+    // Fix 3: CacheMode setzen, um Cold-Start-Rendering-Probleme zu vermeiden
+    final controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setCacheMode(CacheMode.LOAD_NO_CACHE); // Fix 3: Cache deaktivieren
     setState(() => _hiddenController = controller);
 
     var pageLoaded = false;
     controller.setNavigationDelegate(NavigationDelegate(
       onPageFinished: (_) => pageLoaded = true,
+      // Fix 3: Fehler beim Laden erfassen und anzeigen
+      onWebResourceError: (error) {
+        setState(() {
+          _initError = 'WebView-Fehler: ${error.description} (Code: ${error.errorCode})';
+        });
+      },
     ));
 
     try {
@@ -192,11 +205,24 @@ class _HarvestTestCasesScreenState extends State<HarvestTestCasesScreen> {
               },
             ),
           ),
-          // Versteckte WebView, in der die Tests tatsächlich laufen — muss
+      // Versteckte WebView, in der die Tests tatsächlich laufen — muss
           // gemountet sein, damit JS zuverlässig ausgeführt wird, deshalb
           // nicht komplett unsichtbar, sondern nur sehr klein.
+          // Fix 3: Loading-Status und Fehlermeldung statt weißem Screen
           if (_hiddenController != null)
-            SizedBox(height: 1, width: 1, child: WebViewWidget(controller: _hiddenController!)),
+            SizedBox(
+              height: 1,
+              width: 1,
+              child: Stack(
+                children: [
+                  WebViewWidget(controller: _hiddenController!),
+                  if (_initError != null)
+                    const Center(
+                      child: Icon(Icons.error, size: 16, color: Colors.red),
+                    ),
+                ],
+              ),
+            ),
         ],
       ),
     );

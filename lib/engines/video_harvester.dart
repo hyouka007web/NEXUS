@@ -208,6 +208,9 @@ class VideoHarvester {
       request.headers.set(HttpHeaders.userAgentHeader, ua);
       request.headers.set('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8');
       request.headers.set('Accept-Language', 'de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7');
+      // Fix 2: Cache-Control: no-cache für frische Scraper-Ergebnisse
+      request.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+      request.headers.set('Pragma', 'no-cache');
       config.extraHeaders?.forEach((k, v) => request.headers.set(k, v));
 
       final response = await request.close().timeout(config.timeout);

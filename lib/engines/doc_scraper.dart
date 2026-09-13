@@ -522,11 +522,17 @@ class DocScraper {
     return null;
   }
 
-  /// Einfache DEFLATE-Dekompression (UTF-8 dekodiert).
+  /// DEFLATE-Dekompression für EPUB-ZIP-Einträge (nutzt dart:io ZLibDecoder).
+  /// Gibt null zurück, wenn Dekompression fehlschlägt (Fallback: rohe Bytes).
   Uint8List? _inflate(Uint8List data) {
     try {
-      return null;
+      // dart:io stellt ZLibDecoder für DEFLATE-kompatible Dekompression bereit.
+      // EPUB-Dateien sind ZIP-Archive (DEFLATE-kompumiert).
+      final decoder = ZLibDecoder();
+      final result = decoder.convert(data);
+      return result is Uint8List ? result : Uint8List.fromList(result);
     } catch (e) {
+      _log('DEFLATE-Dekompression fehlgeschlagen: $e');
       return null;
     }
   }
@@ -561,6 +567,9 @@ class DocScraper {
     request.headers.set(HttpHeaders.userAgentHeader, ua);
     request.headers.set('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8');
     request.headers.set('Accept-Language', 'de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7');
+    // Fix 2: Cache-Control: no-cache für frische Scraper-Ergebnisse
+    request.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    request.headers.set('Pragma', 'no-cache');
     config.extraHeaders?.forEach((k, v) => request.headers.set(k, v));
   }
 

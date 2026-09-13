@@ -89,6 +89,9 @@ class ManifestParser {
       final req = await client.getUrl(Uri.parse(url));
       req.headers.set(HttpHeaders.userAgentHeader,
           headers['User-Agent'] ?? 'Mozilla/5.0 (Linux; NEXUS Browser/1.0)');
+      // Fix 2: Cache-Control: no-cache für frische Manifest-Ergebnisse
+      req.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+      req.headers.set('Pragma', 'no-cache');
       final ref = headers['Referer'];
       if (ref != null && ref.isNotEmpty) req.headers.set(HttpHeaders.refererHeader, ref);
       headers.forEach((k, v) {

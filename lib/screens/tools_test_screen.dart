@@ -45,8 +45,9 @@ class _ToolsTestScreenState extends State<ToolsTestScreen> {
     try {
       final result = await ScraperEngine.scrape(_urlController.text.trim());
       setState(() => _scrapeResult = result);
-    } catch (e) {
-      setState(() => _error = 'Scraper-Fehler: $e');
+    } catch (e, stack) {
+      // Fix 2: Detaillierte Fehlerausgabe statt stillem Fail
+      setState(() => _error = 'Scraper-Fehler: $e\n$stack');
     } finally {
       setState(() => _scraping = false);
     }
@@ -62,8 +63,30 @@ class _ToolsTestScreenState extends State<ToolsTestScreen> {
       final result =
           await VideoHarvesterEngine.harvest(_urlController.text.trim());
       setState(() => _harvested = result);
-    } catch (e) {
-      setState(() => _error = 'Harvester-Fehler: $e');
+    } catch (e, stack) {
+      // Fix 2: Detaillierte Fehlerausgabe statt stillem Fail
+      setState(() => _error = 'Harvester-Fehler: $e\n$stack');
+    } finally {
+      setState(() => _harvesting = false);
+    }
+  }
+
+  // Fix 2: Deep-Scrape-Button für Dokumente (PDF/EPUB/MOBI)
+  Future<void> _runDocScraper() async {
+    setState(() {
+      _harvesting = true;
+      _error = null;
+      _harvested = [];
+    });
+    try {
+      final result = await ScraperEngine.deepScrape(_urlController.text.trim());
+      setState(() {
+        _error = 'Deep Scraper: ${result.videos.length} Videos, ${result.docs.length} Dokumente, ${result.candidates.length} Kandidaten';
+        // Zeige Dokumente als auch Videos an
+        _harvested = result.videos;
+      });
+    } catch (e, stack) {
+      setState(() => _error = 'DocScraper-Fehler: $e\n$stack');
     } finally {
       setState(() => _harvesting = false);
     }
@@ -116,6 +139,14 @@ class _ToolsTestScreenState extends State<ToolsTestScreen> {
                 child: FilledButton.tonal(
                   onPressed: _harvesting ? null : _runHarvester,
                   child: Text(_harvesting ? 'Läuft…' : 'Video Harvester'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Fix 4: PDF/EPUB-Harvester-Button direkt im Tools-Test-Screen
+              Expanded(
+                child: FilledButton.tonal(
+                  onPressed: _harvesting ? null : _runDocScraper,
+                  child: Text(_harvesting ? 'Läuft…' : 'Doc Harvester'),
                 ),
               ),
             ],
