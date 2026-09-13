@@ -36,10 +36,8 @@ jobs:
         run: |
           rm -rf android/
           echo "=== Running flutter create --platforms=android ==="
-          set +e
-          flutter create --platforms=android . 2>&1
-          FLUTTER_EXIT=$?
-          echo "=== flutter create exit code: $FLUTTER_EXIT ==="
+          flutter create --platforms=android --org com.nexus.browser --project-name nexus_flutter .
+          echo "=== flutter create exit code: $? ==="
           echo "=== Checking android dir ==="
           ls -la android/ 2>&1 || echo "android/ dir not created"
           echo "=== Generated build.gradle ==="
@@ -72,28 +70,18 @@ jobs:
       - name: Dart analyze
         run: flutter analyze 2>&1 || true
 
-      - name: Build APK
-        id: build_apk
+      - name: Check Flutter binary
         run: |
-          echo "=== Flutter version ==="
+          which flutter
+          echo "FLUTTER_ROOT: $FLUTTER_ROOT"
+          echo "PATH: $PATH"
           flutter --version
-          echo "=== Checking android dir ==="
-          ls -la android/ 2>&1 || echo "No android/ dir"
-          ls -la android/app/ 2>&1 || echo "No android/app/ dir"
-          ls -la android/app/build.gradle 2>&1 || echo "No build.gradle"
-          echo "=== Checking build.gradle content ==="
-          cat android/app/build.gradle 2>&1 || echo "No build.gradle"
+
+      - name: Build APK
+        run: |
           echo "=== Running: flutter build apk --release ==="
           flutter build apk --release 2>&1
-          BUILD_EXIT=$?
-          echo "=== Build exit code: $BUILD_EXIT ==="
-          if [ $BUILD_EXIT -ne 0 ]; then
-            echo "=== BUILD FAILED - checking for errors ==="
-            echo "=== build/ directory contents ==="
-            find build/ -type f 2>/dev/null | head -20 || echo "No build/ dir"
-            echo "=== Looking for error patterns ==="
-            find / -path "*/build/outputs/flutter-apk*" -name "*.apk" 2>/dev/null || true
-          fi
+          echo "=== Build exit code: $? ==="
           echo "=== APK files ==="
           find build/ -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
 
@@ -141,11 +129,9 @@ jobs:
       - name: Linux-Ordner erzeugen
         run: |
           rm -rf linux/
-          echo "=== Running flutter create ==="
-          set +e
-          flutter create --platforms=linux . 2>&1
-          FLUTTER_EXIT=$?
-          echo "=== flutter create exit code: $FLUTTER_EXIT ==="
+          echo "=== Running flutter create --platforms=linux ==="
+          flutter create --platforms=linux --org com.nexus.browser --project-name nexus_flutter .
+          echo "=== flutter create exit code: $? ==="
 
       - name: Flutter pub get (Android)
         run: |
@@ -155,6 +141,12 @@ jobs:
           echo "=== pub get exit code: $PUB_EXIT ==="
       - name: Dart analyze
         run: flutter analyze 2>&1 || true
+
+      - name: Check Flutter binary
+        run: |
+          which flutter
+          echo "FLUTTER_ROOT: $FLUTTER_ROOT"
+          flutter --version
 
       - name: Build Linux
         run: |
@@ -192,7 +184,7 @@ jobs:
         shell: bash
         run: |
           if [ ! -d "windows" ]; then
-            flutter create --platforms=windows .
+            flutter create --platforms=windows --org com.nexus.browser --project-name nexus_flutter .
           fi
 
       - name: Flutter pub get (Android)
