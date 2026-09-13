@@ -54,18 +54,58 @@ jobs:
       - name: Clean
         run: flutter clean
 
-      # FIX: Lower compileSdkVersion to 34 (Flutter 3.24 may default to 35,
-      #       which may not be installed on ubuntu-latest runners)
-      - name: Set compileSdkVersion to 34
+      # FIX: Patch build.gradle to fix "Value is null" error
+      - name: Patch build.gradle
         run: |
-          if [ -f "android/app/build.gradle" ]; then
-            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' android/app/build.gradle
-            sed -i 's/compileSdk flutter.compileSdk/compileSdk 34/g' android/app/build.gradle
-            sed -i 's/compileSdk[s]* = [0-9]*/compileSdk 34/g' android/app/build.gradle
-            sed -i 's/compileSdkVersion = [0-9]*/compileSdkVersion 34/g' android/app/build.gradle
-            sed -i 's/compileSdkVersion [0-9]*/compileSdkVersion 34/g' android/app/build.gradle
-            sed -i 's/compileSdk [0-9]*/compileSdk 34/g' android/app/build.gradle
-          fi
+          cat > android/app/build.gradle << 'GRADLE_EOF'
+apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android'
+apply from: "\${System.env.FLUTTER_ROOT}/packages/flutter_tools/gradle/app.gradle"
+
+android {
+    namespace 'com.nexus.browser.nexus_flutter'
+    compileSdkVersion 34
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
+    sourceSets {
+        main.java.srcDirs += 'src/main/kotlin'
+    }
+
+    defaultConfig {
+        applicationId 'com.nexus.browser.nexus_flutter'
+        minSdkVersion 21
+        targetSdkVersion 34
+        versionCode flutter.versionCode.toInteger()
+        versionName flutter.versionName
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.debug
+            minifyEnabled false
+            shrinkResources false
+        }
+    }
+
+    lint {
+        disable 'C0239'
+        checkReleaseBuilds false
+    }
+}
+
+dependencies {
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.0'
+}
+GRADLE_EOF
+          echo "=== Patched build.gradle ==="
+          cat android/app/build.gradle
 
       - name: Dart analyze
         run: flutter analyze 2>&1 || true
