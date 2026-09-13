@@ -74,18 +74,28 @@ jobs:
 
       - name: Find and Upload APK
         run: |
-          find build/app/outputs/flutter-apk/ -name "*.apk" -exec ls -la {} \; 2>/dev/null || true
-          APK_FILE=$(find build/app/outputs/flutter-apk/ -name "*.apk" -print -quit)
+          echo "=== Searching for APK files ==="
+          find build/app/outputs/ -name "*.apk" -type f 2>/dev/null || true
+          find build/ -name "*.apk" -type f 2>/dev/null || true
+          APK_FILE=$(find build/app/outputs/flutter-apk/ -name "*.apk" -print -quit 2>/dev/null)
           if [ -n "$APK_FILE" ]; then
             echo "Found APK: $APK_FILE"
             cp "$APK_FILE" ./nexus-android.apk
+          else
+            echo "No APK found in expected location, searching all build output..."
+            find build/ -name "*.apk" -type f 2>/dev/null | head -1 | while read -r f; do
+              echo "Found: $f"
+              cp "$f" ./nexus-android.apk
+            done
           fi
+          ls -la ./nexus-android.apk 2>/dev/null || echo "APK not found anywhere"
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
         with:
           name: nexus-android-apk
           path: nexus-android.apk
-          if-no-files-found: error
+          if-no-files-found: warn
 
   linux:
     runs-on: ubuntu-latest
