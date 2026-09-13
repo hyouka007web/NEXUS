@@ -89,10 +89,8 @@ jobs:
 
       - name: Linux-Ordner erzeugen
         run: |
-          flutter create --platforms=linux . || (
-            echo "flutter create failed, trying with force..."
-            flutter create --platforms=linux -f .
-          )
+          rm -rf linux/
+          flutter create --platforms=linux . 2>&1
 
       - run: flutter pub get
       - run: flutter build linux --release
