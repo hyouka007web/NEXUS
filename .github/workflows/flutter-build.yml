@@ -30,9 +30,7 @@ jobs:
           channel: "stable"
           cache: true
 
-      # FIX: If android/ dir doesn't exist, generate it.
-      # If it already exists, just run pub get and build.
-      # This avoids flutter create failing on re-runs.
+      # Generate android/ folder if it doesn't exist
       - name: Android-Ordner erzeugen
         run: |
           if [ ! -d "android/app" ]; then
@@ -40,6 +38,16 @@ jobs:
           fi
 
       - run: flutter pub get
+      
+      # FIX: Lower compileSdkVersion to 34 (Flutter 3.24 may default to 35,
+      #       which may not be installed on ubuntu-latest runners)
+      - name: Set compileSdkVersion to 34
+        run: |
+          if [ -f "android/app/build.gradle" ]; then
+            sed -i 's/compileSdkVersion 35/compileSdkVersion 34/g' android/app/build.gradle
+            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' android/app/build.gradle
+          fi
+
       - run: flutter build apk --release
 
       - uses: actions/upload-artifact@v4
