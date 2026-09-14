@@ -28,9 +28,8 @@ jobs:
       
       - name: Android-Ordner erzeugen
         run: |
-          mkdir -p android/app/src/main/java
-          mkdir -p android/app/src/main/kotlin
-          echo "android created"
+          rm -rf android
+          flutter create --platforms=android .
         timeout-minutes: 5
       
       - name: Run flutter pub get
@@ -60,8 +59,7 @@ jobs:
       - name: Linux-Build-Abhängigkeiten
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang libgtk5.0-0 libgtk-3-dev liblzma-dev
-          sudo apt-get install -y libstdc++6
+          sudo apt-get install -y clang libgtk-3-dev liblzma-dev libstdc++6
       
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -71,8 +69,8 @@ jobs:
       
       - name: Linux-Ordner erzeugen
         run: |
-          mkdir -p linux
-          echo "linux created"
+          rm -rf linux
+          flutter create --platforms=linux .
         timeout-minutes: 5
       
       - name: Run flutter pub get
