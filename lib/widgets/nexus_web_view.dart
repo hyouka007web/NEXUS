@@ -32,9 +32,8 @@ class _NexusWebViewState extends State<NexusWebView> {
     return Stack(
       children: [
         InAppWebView(
-          // Mobile User-Agent für Scraping
           initialUrlRequest: URLRequest(
-            url: Uri.parse(widget.url),
+            url: WebUri.parse(widget.url),
             headers: {
               'User-Agent': 'Mozilla/5.0 (Linux; Android 12; SM-S901B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
             },
@@ -50,7 +49,6 @@ class _NexusWebViewState extends State<NexusWebView> {
             allowFileAccess: true,
             allowContentAccess: true,
             supportMultipleWindows: true,
-            isInspectableInChrome: true,
           ),
           onWebViewCreated: (controller) {
             _webViewController = controller;
@@ -64,12 +62,10 @@ class _NexusWebViewState extends State<NexusWebView> {
           // 🛰️ HAUPT-HOOK: Abfangen jeder Netzwerk-Anfrage für Adblock
           shouldInterceptRequest: (controller, request) async {
             if (widget.adblock.isBlocked(request.url.toString())) {
-              // Request blocken
-              return ShouldInterceptRequestResponse(
-                action: ShouldInterceptRequestResponseAction.CANCEL,
-                body: Uint8List(0),
-                responseHeaders: {},
+              // Request blocken mit WebResourceResponse
+              return WebResourceResponse(
                 contentType: 'text/plain',
+                data: Uint8List(0),
                 statusCode: 403,
               );
             }
