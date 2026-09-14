@@ -1,0 +1,94 @@
+name: Build NEXUS
+
+on:
+  push:
+    branches: [main]
+
+env:
+  FLUTTER_VERSION: "3.35.0"
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+      
+      - name: Android-Ordner erzeugen
+        run: |
+          mkdir -p android/app/src/main/java
+          mkdir -p android/app/src/main/kotlin
+          echo "android created"
+        timeout-minutes: 5
+      
+      - name: Run flutter pub get
+        run: flutter pub get
+      
+      - name: Run flutter build apk --debug
+        run: flutter build apk --debug
+      
+      - name: Android-Bundle als zip
+        run: |
+          cd build/app/outputs/flutter-apk
+          zip -r ../../../nexus-android.apk app-debug.apk
+        timeout-minutes: 10
+      
+      - name: Run actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-android-apk
+          path: nexus-android.apk
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Linux-Build-Abhängigkeiten
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang libgtk5.0-0 libgtk-3-dev liblzma-dev
+          sudo apt-get install -y libstdc++6
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+      
+      - name: Linux-Ordner erzeugen
+        run: |
+          mkdir -p linux
+          echo "linux created"
+        timeout-minutes: 5
+      
+      - name: Run flutter pub get
+        run: flutter pub get
+      
+      - name: Run flutter build linux --release
+        run: flutter build linux --release
+      
+      - name: Linux-Bundle als tar.gz
+        run: |
+          cd build/linux/x64/release/bundle
+          tar -czvf ../../../nexus-linux.tar.gz .
+        timeout-minutes: 10
+      
+      - name: Run actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-linux
+          path: nexus-linux.tar.gz
