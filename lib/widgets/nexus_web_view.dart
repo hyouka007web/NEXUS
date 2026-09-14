@@ -33,7 +33,7 @@ class _NexusWebViewState extends State<NexusWebView> {
       children: [
         InAppWebView(
           initialUrlRequest: URLRequest(
-            url: WebUri.parse(widget.url),
+            url: WebUri(widget.url),
             headers: {
               'User-Agent': 'Mozilla/5.0 (Linux; Android 12; SM-S901B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
             },
