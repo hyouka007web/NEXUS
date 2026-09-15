@@ -26,7 +26,6 @@ class _NexusWebViewState extends State<NexusWebView> {
   late InAppWebViewController _webViewController;
   bool _isLoading = true;
 
-  // ✅ Redirect-Ketten-Zählung
   final Map<String, int> _redirectCounts = {};
 
   @override
@@ -67,7 +66,6 @@ class _NexusWebViewState extends State<NexusWebView> {
             setState(() => _isLoading = false);
             _scrapeVideos();
           },
-          // 🛰️ HAUPT-HOOK: Abfangen jeder Netzwerk-Anfrage für Adblock
           shouldInterceptRequest: (controller, request) async {
             if (widget.adblock.isBlocked(request.url.toString())) {
               return WebResourceResponse(
@@ -78,24 +76,17 @@ class _NexusWebViewState extends State<NexusWebView> {
             }
             return null;
           },
-          // ✅ Redirect-Ketten zählen und abschalten bei zu vielen Weiterleitungen
           shouldOverrideUrlLoading: (controller, navigationAction) async {
             final url = navigationAction.request.url.toString();
             final count = (_redirectCounts[url] ?? 0) + 1;
             _redirectCounts[url] = count;
             if (count > 5) {
-              return ShouldOverrideUrlLoadingAction.cancel;
+              return false;
             }
-            return ShouldOverrideUrlLoadingAction.allow;
+            return true;
           },
-          // ✅ onCreateWindow nur bei echter User-Geste (window.open)
           onCreateWindow: (controller, createWindowRequest) async {
-            if (!createWindowRequest.isUserGesture) {
-              return null;
-            }
-            return InAppWebViewHitTestResult(
-              viewType: createWindowRequest.viewType,
-            );
+            return null;
           },
         ),
         if (_isLoading)
@@ -108,7 +99,6 @@ class _NexusWebViewState extends State<NexusWebView> {
     );
   }
 
-  // ✅ Video-Scraper via JS-Injection
   Future<void> _scrapeVideos() async {
     final result = await _webViewController.evaluateJavascript(source: """
       (function() {
