@@ -2,20 +2,20 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+import 'package:nexus/services/mediathek_scraper.dart';
 
 /// VideoDownloader: Downloadt Videos via JS-Injection + native dart:io HTTP-Streaming.
 /// Scans <video>, <source>, HLS (.m3u8), DASH (.mpd) manifests.
+/// Unterstützt ARD-Mediathek-Scraping.
 class VideoDownloader {
   static final List<VideoEntry> downloads = [];
 
   /// Scannt Webseite via JS-Injection nach Video-Quellen.
-  static Future<List<VideoEntry>> scrapeVideos(dynamic webViewController) async {
-    // JS-Injection: Scanne Video-Tags + HLS/DASH-Manifeste
-    final result = await webViewController.evaluateJavascript(source: '''
+  static Future<List<VideoEntry>> scrapeVideos(dynamic controller) async {
+    final result = await controller.evaluateJavascript(source: '''
       (function() {
         var entries = [];
         
-        // Standard Video & Source-Tags
         document.querySelectorAll('video, source').forEach(function(el) {
           var src = el.src || el.getAttribute('src');
           if (src && src.indexOf('http') === 0) {
@@ -23,7 +23,6 @@ class VideoDownloader {
           }
         });
         
-        // HLS-Streams (.m3u8) in Skript-Tags
         document.querySelectorAll('script').forEach(function(script) {
           var text = script.textContent || '';
           var urls = text.match(/https?:\\/\\/[^\\s"']+\\.m3u8/gi);
@@ -34,7 +33,6 @@ class VideoDownloader {
           }
         });
         
-        // DASH-Streams (.mpd)
         document.querySelectorAll('script').forEach(function(script) {
           var text = script.textContent || '';
           var urls = text.match(/https?:\\/\\/[^\\s"']+\\.mpd/gi);
@@ -54,11 +52,23 @@ class VideoDownloader {
     return parsed.map((item) => VideoEntry.fromJson(jsonDecode(item))).toList();
   }
 
+  /// Scrappt ARD-Mediathek-URL und startet Downloads.
+  static Future<List<VideoEntry>> downloadArd(String url) async {
+    final content = await MediathekScraper.scrapeArd(url);
+    final List<VideoEntry> entries = [];
+
+    for (final stream in content.streamUrls) {
+      final entry = await download(stream.url, title: content.title, type: stream.type);
+      entries.add(entry);
+    }
+    return entries;
+  }
+
   /// Native Download via dart:io HTTP-Streaming
-  static Future<VideoEntry> download(String url, {String title = ''}) async {
+  static Future<VideoEntry> download(String url, {String title = '', String type = 'video'}) async {
     final entry = VideoEntry(
       url: url,
-      type: _detectType(url),
+      type: type,
       title: title.isNotEmpty ? title : 'video_${DateTime.now().millisecondsSinceEpoch}',
       status: DownloadStatus.downloading,
       progress: 0.0,
@@ -109,20 +119,14 @@ class VideoDownloader {
     }
     return entry;
   }
-
-  static String _detectType(String url) {
-    if (url.contains('.m3u8')) return 'hls';
-    if (url.contains('.mpd')) return 'dash';
-    return 'video';
-  }
 }
 
 enum DownloadStatus { pending, downloading, completed, failed }
 
 class VideoEntry {
   final String url;
-  final String type;
-  final String title;
+  String type;
+  String title;
   DownloadStatus status;
   double progress;
   int totalBytes;
