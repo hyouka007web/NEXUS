@@ -1,9 +1,11 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:nexus/services/adblock_engine.dart';
 import 'package:nexus/services/video_downloader.dart';
+import 'package:nexus/services/hls_dash_parser.dart';
 
 /// NexusWebView: Browser-Engine mit shouldInterceptRequest für Adblock,
 /// Redirect-Ketten-Zählung, User-Gesture-Basierte onCreateWindow,
@@ -21,9 +23,7 @@ class _NexusWebViewState extends State<NexusWebView> {
   late InAppWebViewController _webViewController;
   bool _isLoading = true;
 
-  // ✅ AdBlock-Engine (statisch!)
   static final AdBlockEngine _adblock = AdBlockEngine();
-  // ✅ Redirect-Ketten-Zählung
   final Map<String, int> _redirectCounts = {};
 
   @override
@@ -64,7 +64,6 @@ class _NexusWebViewState extends State<NexusWebView> {
             setState(() => _isLoading = false);
             _scrapeVideos();
           },
-          // ✅ AdBlock via Trie-basierte Domain-Überprüfung
           shouldInterceptRequest: (controller, request) async {
             if (_adblock.isBlocked(request.url.toString())) {
               return WebResourceResponse(
@@ -75,7 +74,6 @@ class _NexusWebViewState extends State<NexusWebView> {
             }
             return null;
           },
-          // ✅ Redirect-Ketten zählen und bei >5 abbrechen (Future.value!))
           shouldOverrideUrlLoading: (controller, navigationAction) async {
             final url = navigationAction.request.url.toString();
             final count = (_redirectCounts[url] ?? 0) + 1;
@@ -83,7 +81,6 @@ class _NexusWebViewState extends State<NexusWebView> {
             if (count > 5) return Future.value(false);
             return Future.value(true);
           },
-          // ✅ onCreateWindow: User-Gesture erzwingen
           onCreateWindow: (controller, createWindowRequest) async {
             return null;
           },
@@ -94,7 +91,6 @@ class _NexusWebViewState extends State<NexusWebView> {
     );
   }
 
-  // ✅ Video-Scraper: Scannt nach HLS/DASH und lokalen Videos
   Future<void> _scrapeVideos() async {
     final result = await _webViewController.evaluateJavascript(source: """
       (function() {
