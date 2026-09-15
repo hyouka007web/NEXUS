@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:nexus/services/adblock_service.dart';
 import 'package:nexus/services/video_downloader.dart';
+import 'dart:convert';
 
 /// NexusWebView: Browser-Engine mit shouldInterceptRequest für Adblock,
 /// Redirect-Ketten-Zählung, User-Gesture-Basierte onCreateWindow,
@@ -25,7 +26,6 @@ class _NexusWebViewState extends State<NexusWebView> {
   late InAppWebViewController _webViewController;
   bool _isLoading = true;
 
-  // ✅ Redirect-Ketten-Zählung
   final Map<String, int> _redirectCounts = {};
 
   @override
@@ -66,7 +66,6 @@ class _NexusWebViewState extends State<NexusWebView> {
             setState(() => _isLoading = false);
             _scrapeVideos();
           },
-          // 🛰️ HAUPT-HOOK: Abfangen jeder Netzwerk-Anfrage für Adblock
           shouldInterceptRequest: (controller, request) async {
             if (widget.adblock.isBlocked(request.url.toString())) {
               return WebResourceResponse(
@@ -77,7 +76,6 @@ class _NexusWebViewState extends State<NexusWebView> {
             }
             return null;
           },
-          // ✅ Redirect-Ketten zählen und abschalten bei zu vielen Weiterleitungen
           shouldOverrideUrlLoading: (controller, navigationAction) async {
             final url = navigationAction.request.url.toString();
             final count = (_redirectCounts[url] ?? 0) + 1;
@@ -87,7 +85,6 @@ class _NexusWebViewState extends State<NexusWebView> {
             }
             return ShouldOverrideUrlLoadingAction.allow;
           },
-          // ✅ onCreateWindow nur bei echter User-Geste (window.open)
           onCreateWindow: (controller, createWindowRequest) async {
             if (!createWindowRequest.isUserGesture) {
               return null;
@@ -107,11 +104,26 @@ class _NexusWebViewState extends State<NexusWebView> {
     );
   }
 
-  // ✅ Video-Scraper via JS-Injection
   Future<void> _scrapeVideos() async {
-    final List<VideoEntry> entries = await VideoDownloader.scrapeVideos(_webViewController);
-    for (final entry in entries) {
-      await VideoDownloader.download(entry.url, title: entry.title);
+    final result = await _webViewController.evaluateJavascript(
+      source: """
+        (function() {
+          var srcs = [];
+          document.querySelectorAll('video, source').forEach(function(el) {
+            var src = el.src || el.getAttribute('src');
+            if (src && src.indexOf('http') === 0 && srcs.indexOf(src) === -1) {
+              srcs.push(src);
+            }
+          });
+          return JSON.stringify(srcs);
+        })();
+      """) ?? '[]';
+
+    if (result != '[]') {
+      final List<dynamic> urls = jsonDecode(result);
+      for (var url in urls) {
+        await VideoDownloader.download(url.toString());
+      }
     }
   }
 }
