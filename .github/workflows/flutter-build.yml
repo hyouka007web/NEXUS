@@ -38,10 +38,10 @@ jobs:
       - name: Run flutter build apk --debug
         run: flutter build apk --debug
       
-      - name: Android-Bundle als zip
+      - name: Android-APK kopieren
         run: |
           cd build/app/outputs/flutter-apk
-          zip -r $GITHUB_WORKSPACE/nexus-android.apk app-debug.apk
+          cp app-debug.apk $GITHUB_WORKSPACE/nexus-android.apk
         timeout-minutes: 10
       
       - name: Run actions/upload-artifact@v4
