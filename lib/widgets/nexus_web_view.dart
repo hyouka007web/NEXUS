@@ -78,8 +78,8 @@ class _NexusWebViewState extends State<NexusWebView> {
             final url = navigationAction.request.url.toString();
             final count = (_redirectCounts[url] ?? 0) + 1;
             _redirectCounts[url] = count;
-            if (count > 5) return Future.value(false);
-            return Future.value(true);
+            if (count > 5) return Future.value<bool?>(false);
+            return Future.value<bool?>(true);
           },
           onCreateWindow: (controller, createWindowRequest) async {
             return null;
