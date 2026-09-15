@@ -1,73 +1,81 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:nexus/services/adblock_service.dart';
+import 'package:provider/provider.dart';
+import 'package:nexus/services/browser_controller.dart';
+import 'package:nexus/theme/nexus_theme.dart';
+import 'package:nexus/widgets/nexus_panels.dart';
+import 'package:nexus/widgets/nexus_sidebar.dart';
+import 'package:nexus/widgets/nexus_url_bar.dart';
 import 'package:nexus/widgets/nexus_web_view.dart';
+import 'package:nexus/widgets/speed_dial.dart';
+import 'package:nexus/widgets/tab_strip.dart';
 
-class BrowserScreen extends StatefulWidget {
+class BrowserScreen extends StatelessWidget {
   const BrowserScreen({super.key});
 
   @override
-  State<BrowserScreen> createState() => _BrowserScreenState();
-}
-
-class _BrowserScreenState extends State<BrowserScreen> {
-  final AdblockService _adblock = AdblockService();
-  final TextEditingController _urlController = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    _adblock.loadFilters();
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final controller = context.watch<BrowserController>();
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('NEXUS Browser'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.shield),
-            onPressed: () => _adblock.toggle(),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(8),
-            child: TextField(
-              controller: _urlController,
-              decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.search),
-                hintText: 'URL eingeben',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
+      backgroundColor: NexusColors.background,
+      body: SafeArea(
+        child: Row(
+          children: [
+            const NexusSidebarRail(),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              width: controller.sidebarExpanded ? 260 : 0,
+              clipBehavior: Clip.hardEdge,
+              decoration: const BoxDecoration(),
+              child: controller.sidebarExpanded ? _buildPanel(controller) : null,
+            ),
+            Expanded(
+              child: Column(
+                children: [
+                  const NexusTabStrip(),
+                  const NexusUrlBar(),
+                  Expanded(
+                    child: Stack(
+                      children: controller.tabs.map((tab) {
+                        final active = tab.id == controller.activeTabId;
+                        return Visibility(
+                          visible: active,
+                          maintainState: true,
+                          child: tab.isHome
+                              ? SpeedDial(onOpen: (url) {
+                                  tab.update(isHome: false, url: url, title: url);
+                                })
+                              : NexusWebView(
+                                  key: ValueKey(tab.id),
+                                  tab: tab,
+                                  adblock: controller.adblock,
+                                  onOpenNewTab: (url) => controller.newTab(url: url),
+                                ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
               ),
-              onSubmitted: (value) {
-                if (value.isNotEmpty) {
-                  _loadUrl(value);
-                }
-              },
             ),
-          ),
-          Expanded(
-            child: NexusWebView(
-              url: _urlController.text.isNotEmpty
-                  ? _urlController.text
-                  : 'https://duckduckgo.com',
-              adblock: _adblock,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  void _loadUrl(String url) {
-    setState(() {
-      _urlController.text = url;
-    });
+  Widget _buildPanel(BrowserController controller) {
+    switch (controller.activePanel) {
+      case SidebarPanel.tabs:
+        return const TabsPanel();
+      case SidebarPanel.harvester:
+        return const HarvesterPanel();
+      case SidebarPanel.downloads:
+        return const DownloadsPanel();
+      case SidebarPanel.speedDial:
+      case SidebarPanel.none:
+        return const TabsPanel();
+    }
   }
 }
+

@@ -1,3 +1,14 @@
+def localPropertiesFile = new File(rootProject.projectDir, "local.properties")
+def localProperties = new Properties()
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withReader("UTF-8") { reader -> localProperties.load(reader) }
+}
+
+def flutterRoot = localProperties.getProperty("flutter.sdk")
+if (flutterRoot == null) {
+    throw new GradleException("Flutter SDK not found. Setze flutter.sdk in android/local.properties (wird normalerweise automatisch von `flutter pub get` geschrieben).")
+}
+
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
@@ -5,7 +16,7 @@ apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
 android {
     namespace 'com.nexus.browser'
     compileSdkVersion 35
-    ndkVersion "27.0.1234567"
+    ndkVersion flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -24,12 +35,14 @@ android {
         applicationId "com.nexus.browser"
         minSdkVersion 21
         targetSdkVersion 35
-        versionCode 1
-        versionName "0.1.0"
+        versionCode flutter.versionCode
+        versionName flutter.versionName
     }
 
     buildTypes {
         release {
+            // Für den Anfang mit debug-Key signieren, damit `flutter build apk --release` sofort läuft.
+            signingConfig signingConfigs.debug
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }

@@ -1,155 +1,136 @@
-import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:nexus/services/mediathek_scraper.dart';
+import 'package:nexus/models/download_entry.dart';
+import 'package:nexus/models/harvested_media.dart';
 
-/// VideoDownloader: Downloadt Videos via JS-Injection + native dart:io HTTP-Streaming.
-/// Scans <video>, <source>, HLS (.m3u8), DASH (.mpd) manifests.
-/// Unterstützt ARD-Mediathek-Scraping.
-class VideoDownloader {
-  static final List<VideoEntry> downloads = [];
+/// VideoDownloader: verwaltet alle laufenden/abgeschlossenen Downloads.
+/// Als ChangeNotifier, damit die Mediathek live Fortschritt anzeigen kann.
+/// Speichert in einem App-eigenen "NEXUS"-Ordner im externen Speicher
+/// (kein Laufzeit-Permission-Prompt auf Android 10+ nötig).
+class VideoDownloader extends ChangeNotifier {
+  static final VideoDownloader _instance = VideoDownloader._internal();
+  factory VideoDownloader() => _instance;
+  VideoDownloader._internal();
 
-  /// Scannt Webseite via JS-Injection nach Video-Quellen.
-  static Future<List<VideoEntry>> scrapeVideos(dynamic controller) async {
-    final result = await controller.evaluateJavascript(source: '''
-      (function() {
-        var entries = [];
-        
-        document.querySelectorAll('video, source').forEach(function(el) {
-          var src = el.src || el.getAttribute('src');
-          if (src && src.indexOf('http') === 0) {
-            entries.push(JSON.stringify({url: src, type: 'video'}));
-          }
-        });
-        
-        document.querySelectorAll('script').forEach(function(script) {
-          var text = script.textContent || '';
-          var urls = text.match(/https?:\\/\\/[^\\s"']+\\.m3u8/gi);
-          if (urls) {
-            urls.forEach(function(url) {
-              entries.push(JSON.stringify({url: url, type: 'hls'}));
-            });
-          }
-        });
-        
-        document.querySelectorAll('script').forEach(function(script) {
-          var text = script.textContent || '';
-          var urls = text.match(/https?:\\/\\/[^\\s"']+\\.mpd/gi);
-          if (urls) {
-            urls.forEach(function(url) {
-              entries.push(JSON.stringify({url: url, type: 'dash'}));
-            });
-          }
-        });
-        
-        return JSON.stringify(entries);
-      })();
-    ''') ?? '[]';
+  final List<DownloadEntry> downloads = [];
+  final Map<String, StreamSubscription> _activeSubs = {};
+  int _counter = 0;
 
-    if (result == '[]') return [];
-    final List<dynamic> parsed = jsonDecode(result);
-    return parsed.map((item) => VideoEntry.fromJson(jsonDecode(item))).toList();
-  }
-
-  /// Scrappt ARD-Mediathek-URL und startet Downloads.
-  static Future<List<VideoEntry>> downloadArd(String url) async {
-    final content = await MediathekScraper.scrapeArd(url);
-    final List<VideoEntry> entries = [];
-
-    for (final stream in content.streamUrls) {
-      final entry = await download(stream.url, title: content.title, type: stream.type);
-      entries.add(entry);
+  Future<Directory> _targetDir() async {
+    Directory base;
+    try {
+      base = (await getExternalStorageDirectory())!;
+    } catch (_) {
+      base = await getApplicationDocumentsDirectory();
     }
-    return entries;
+    final dir = Directory('${base.path}/NEXUS_Downloads');
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    return dir;
   }
 
-  /// Native Download via dart:io HTTP-Streaming
-  static Future<VideoEntry> download(String url, {String title = '', String type = 'video'}) async {
-    final entry = VideoEntry(
-      url: url,
-      type: type,
-      title: title.isNotEmpty ? title : 'video_${DateTime.now().millisecondsSinceEpoch}',
-      status: DownloadStatus.downloading,
-      progress: 0.0,
-    );
-    downloads.add(entry);
+  String _extensionFor(String type, String url) {
+    if (url.contains('.mp3')) return 'mp3';
+    if (url.contains('.m4a')) return 'm4a';
+    if (url.contains('.webm')) return 'webm';
+    if (type == 'hls' || type == 'dash') return 'ts'; // Rohsegment/Stream-Mitschnitt
+    return 'mp4';
+  }
 
-    final dir = await getApplicationDocumentsDirectory();
-    final filename = '${entry.title}.mp4';
-    final file = File('${dir.path}/$filename');
+  /// Startet einen Download für eine ausgewählte Qualitätsstufe.
+  Future<DownloadEntry> download(MediaVariant variant, {required String title, required String type}) async {
+    _counter++;
+    final id = 'dl_${DateTime.now().millisecondsSinceEpoch}_$_counter';
+    final safeTitle = title.trim().isEmpty ? 'nexus_media_$_counter' : title.trim();
+    final ext = _extensionFor(type, variant.url);
+
+    final entry = DownloadEntry(
+      id: id,
+      url: variant.url,
+      title: '$safeTitle${variant.label.isNotEmpty ? " [${variant.label}]" : ""}',
+      type: type,
+      status: DownloadStatus.downloading,
+    );
+    downloads.insert(0, entry);
+    notifyListeners();
 
     try {
+      final dir = await _targetDir();
+      final filename = '${entry.title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')}.$ext';
+      final file = File('${dir.path}/$filename');
+      final sink = file.openWrite();
+
       final client = HttpClient();
-      final request = await client.getUrl(Uri.parse(url));
+      final request = await client.getUrl(Uri.parse(variant.url));
       final response = await request.close();
 
       if (response.statusCode != HttpStatus.ok) {
         entry.status = DownloadStatus.failed;
+        entry.error = 'HTTP ${response.statusCode}';
+        notifyListeners();
+        await sink.close();
         return entry;
       }
 
       final contentLength = response.contentLength;
       entry.totalBytes = contentLength;
-
+      entry.progress = contentLength > 0 ? 0.0 : -1;
       var received = 0;
-      final sink = file.openWrite();
-      
-      response.listen(
+
+      final completer = Completer<void>();
+      final sub = response.listen(
         (chunk) {
           sink.add(chunk);
           received += chunk.length;
           entry.receivedBytes = received;
-          if (contentLength > 0) {
-            entry.progress = received / contentLength;
-          }
+          if (contentLength > 0) entry.progress = received / contentLength;
+          notifyListeners();
         },
         onDone: () async {
           await sink.flush();
           await sink.close();
           entry.status = DownloadStatus.completed;
           entry.localPath = file.path;
+          entry.progress = 1.0;
+          notifyListeners();
+          _activeSubs.remove(id);
+          if (!completer.isCompleted) completer.complete();
         },
-        onError: (e) {
+        onError: (e) async {
           entry.status = DownloadStatus.failed;
+          entry.error = e.toString();
+          notifyListeners();
+          await sink.close();
+          _activeSubs.remove(id);
+          if (!completer.isCompleted) completer.complete();
         },
+        cancelOnError: true,
       );
+      _activeSubs[id] = sub;
+      await completer.future;
     } catch (e) {
       entry.status = DownloadStatus.failed;
+      entry.error = e.toString();
+      notifyListeners();
     }
     return entry;
   }
-}
 
-enum DownloadStatus { pending, downloading, completed, failed }
+  void cancel(String id) {
+    _activeSubs[id]?.cancel();
+    _activeSubs.remove(id);
+    final entry = downloads.firstWhere((d) => d.id == id, orElse: () => downloads.first);
+    if (entry.id == id) {
+      entry.status = DownloadStatus.canceled;
+      notifyListeners();
+    }
+  }
 
-class VideoEntry {
-  final String url;
-  String type;
-  String title;
-  DownloadStatus status;
-  double progress;
-  int totalBytes;
-  int receivedBytes;
-  String? localPath;
-
-  VideoEntry({
-    required this.url,
-    required this.type,
-    required this.title,
-    required this.status,
-    required this.progress,
-    this.totalBytes = 0,
-    this.receivedBytes = 0,
-    this.localPath,
-  });
-
-  factory VideoEntry.fromJson(Map<String, dynamic> json) {
-    return VideoEntry(
-      url: json['url'] ?? '',
-      type: json['type'] ?? 'video',
-      title: '',
-      status: DownloadStatus.pending,
-      progress: 0.0,
-    );
+  void remove(String id) {
+    downloads.removeWhere((d) => d.id == id);
+    notifyListeners();
   }
 }

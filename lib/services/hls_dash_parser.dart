@@ -1,71 +1,108 @@
-import 'dart:convert';
-
-/// HLSDashParser: Parsed HLS (.m3u8) und DASH (.mpd) Manifeste.
-/// Extrahiert alle Video-Streams mit Qualitätsstufen.
+/// HLSDashParser: Parsed HLS (.m3u8) Master-/Media-Playlists und
+/// DASH (.mpd) Manifeste zu einzelnen, direkt herunterladbaren
+/// Qualitätsstufen.
 class HLSDashParser {
-  static List<StreamQuality> parseHLS(String playlist) {
+  /// Löst relative Manifest-URLs gegen die Basis-URL auf.
+  static String _resolve(String base, String maybeRelative) {
+    if (maybeRelative.startsWith('http://') || maybeRelative.startsWith('https://')) {
+      return maybeRelative;
+    }
+    try {
+      return Uri.parse(base).resolve(maybeRelative).toString();
+    } catch (_) {
+      return maybeRelative;
+    }
+  }
+
+  static List<StreamQuality> parseHLS(String playlist, {required String manifestUrl}) {
     final streams = <StreamQuality>[];
     final lines = playlist.split('\n');
+    bool isMaster = playlist.contains('#EXT-X-STREAM-INF');
 
     for (int i = 0; i < lines.length; i++) {
       final line = lines[i].trim();
-      if (line.startsWith('#EXTINF')) {
-        final durMatch = RegExp(r'#EXTINF:([\d.]+)').firstMatch(line);
-        final dur = double.tryParse(durMatch?.group(1) ?? '0') ?? 0.0;
-        if (i + 1 < lines.length) {
-          final url = lines[i + 1].trim();
-          if (url.isNotEmpty && !url.startsWith('#')) {
-            streams.add(StreamQuality(url: url, type: 'hls', quality: _getQuality(url), duration: dur));
-          }
-        }
-      }
-      if (line.startsWith('#EXT-X_STREAM-INF')) {
+
+      // Master-Playlist: Verweise auf Varianten-Playlists mit Bandbreite/Auflösung.
+      if (line.startsWith('#EXT-X-STREAM-INF')) {
         final bwMatch = RegExp(r'BANDWIDTH=(\d+)').firstMatch(line);
+        final resMatch = RegExp(r'RESOLUTION=(\d+x\d+)').firstMatch(line);
         final bw = int.tryParse(bwMatch?.group(1) ?? '0') ?? 0;
         if (i + 1 < lines.length) {
-          final url = lines[i + 1].trim();
-          if (url.isNotEmpty && !url.startsWith('#')) {
-            streams.add(StreamQuality(url: url, type: 'hls', quality: _bwToQual(bw), bandwidth: bw));
+          final next = lines[i + 1].trim();
+          if (next.isNotEmpty && !next.startsWith('#')) {
+            streams.add(StreamQuality(
+              url: _resolve(manifestUrl, next),
+              type: 'hls',
+              quality: resMatch?.group(1) ?? _bwToQual(bw),
+              bandwidth: bw,
+            ));
           }
         }
       }
-    }
-    return streams;
-  }
 
-  static List<StreamQuality> parseDASH(String manifest) {
-    final streams = <StreamQuality>[];
-    final repRegex = RegExp(r'<Representation[^>]*>');
-    for (final match in repRegex.allMatches(manifest)) {
-      final repStr = match.group(0)!;
-      final urlMatch = RegExp(r'src="([^"]+)"').firstMatch(repStr);
-      final bwMatch = RegExp(r'bandwidth="(\d+)"').firstMatch(repStr);
-      final wMatch = RegExp(r'width="(\d+)"').firstMatch(repStr);
-      final hMatch = RegExp(r'height="(\d+)"').firstMatch(repStr);
-      final url = urlMatch?.group(1) ?? '';
-      if (url.isNotEmpty) {
+      // Media-Playlist (keine Varianten, direkte Segmente): als "Original" anbieten.
+      if (!isMaster && line.startsWith('#EXTINF') && streams.isEmpty) {
         streams.add(StreamQuality(
-          url: url,
-          type: 'dash',
-          quality: '${wMatch?.group(1) ?? '?' }x${hMatch?.group(1) ?? '?'}',
-          bandwidth: int.tryParse(bwMatch?.group(1) ?? '0') ?? 0,
+          url: manifestUrl,
+          type: 'hls',
+          quality: 'Original (Segmente)',
         ));
+        break;
       }
     }
     return streams;
   }
 
-  static String _getQuality(String url) {
-    final idx = url.indexOf('index-DVR-');
-    if (idx >= 0) {
-      final chunk = url.substring(idx + 8, idx + 15);
-      final digits = chunk.replaceAll(RegExp(r'[^0-9]'), '');
-      if (digits.isNotEmpty) return '${digits}p';
+  static List<StreamQuality> parseDASH(String manifest, {required String manifestUrl}) {
+    final streams = <StreamQuality>[];
+
+    // Optionaler globaler <BaseURL> auf MPD-Ebene
+    final mpdBaseMatch = RegExp(r'<BaseURL>([^<]+)</BaseURL>').firstMatch(manifest);
+    final mpdBase = mpdBaseMatch != null ? _resolve(manifestUrl, mpdBaseMatch.group(1)!.trim()) : manifestUrl;
+
+    final repRegex = RegExp(r'<Representation\b[^>]*>(.*?)</Representation>', dotAll: true);
+    final repSelfClosing = RegExp(r'<Representation\b[^>]*/>');
+
+    final matches = [...repRegex.allMatches(manifest), ...repSelfClosing.allMatches(manifest)];
+
+    for (final match in matches) {
+      final block = match.group(0)!;
+      final attrsPart = block.startsWith('<Representation') ? block : block;
+
+      final bwMatch = RegExp(r'bandwidth="(\d+)"', caseSensitive: false).firstMatch(attrsPart);
+      final wMatch = RegExp(r'width="(\d+)"', caseSensitive: false).firstMatch(attrsPart);
+      final hMatch = RegExp(r'height="(\d+)"', caseSensitive: false).firstMatch(attrsPart);
+
+      // URL kann als <BaseURL> Kindelement ODER (nicht-standard) als Attribut vorliegen.
+      String? url;
+      final childBaseMatch = RegExp(r'<BaseURL>([^<]+)</BaseURL>').firstMatch(block);
+      if (childBaseMatch != null) {
+        url = childBaseMatch.group(1)!.trim();
+      } else {
+        final srcAttr = RegExp(r'(?:src|media)="([^"]+)"', caseSensitive: false).firstMatch(attrsPart);
+        url = srcAttr?.group(1);
+      }
+      if (url == null || url.isEmpty) continue;
+
+      final resolved = _resolve(mpdBase, url);
+      final bw = int.tryParse(bwMatch?.group(1) ?? '0') ?? 0;
+      final quality = (wMatch != null && hMatch != null)
+          ? '${wMatch.group(1)}x${hMatch.group(1)}'
+          : _bwToQual(bw);
+
+      streams.add(StreamQuality(url: resolved, type: 'dash', quality: quality, bandwidth: bw));
     }
-    return 'unknown';
+
+    // Fallback: keine <Representation>-Treffer, aber ein globales BaseURL vorhanden.
+    if (streams.isEmpty && mpdBaseMatch != null) {
+      streams.add(StreamQuality(url: mpdBase, type: 'dash', quality: 'Original'));
+    }
+
+    return streams;
   }
 
   static String _bwToQual(int bw) {
+    if (bw <= 0) return 'Original';
     if (bw > 5000000) return '2160p';
     if (bw > 3000000) return '1440p';
     if (bw > 1500000) return '1080p';
@@ -80,13 +117,11 @@ class StreamQuality {
   final String type;
   final String quality;
   final int bandwidth;
-  final double duration;
 
   StreamQuality({
     required this.url,
     required this.type,
     this.quality = 'unknown',
     this.bandwidth = 0,
-    this.duration = 0.0,
   });
 }
