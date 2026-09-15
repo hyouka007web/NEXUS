@@ -1,104 +1,98 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
-/// Video-Downloader: Scannt Webseiten per JS-Injection nach Video-Tags/HLS/DASH
-/// und lädt diese native mit dart:io herunter.
+/// VideoDownloader: Downloadt Videos via JS-Injection + native dart:io HTTP-Streaming.
+/// Scans <video>, <source>, HLS (.m3u8), DASH (.mpd) manifests.
 class VideoDownloader {
-  // ✅ Globale Liste aller gefundenen Videos (für Mediathek)
   static final List<VideoEntry> downloads = [];
 
-  /// Scannt die aktuelle Webseite mit JS nach allen Video-Quellen
+  /// Scannt Webseite via JS-Injection nach Video-Quellen.
   static Future<List<VideoEntry>> scrapeVideos(dynamic webViewController) async {
-    // JS-Injection: Scanne Video-Tags, Source-Tags, HLS- und DASH-Quellen
+    // JS-Injection: Scanne Video-Tags + HLS/DASH-Manifeste
     final result = await webViewController.evaluateJavascript(source: '''
       (function() {
         var entries = [];
         
-        // Standard Video-Tags & Source-Tags
+        // Standard Video & Source-Tags
         document.querySelectorAll('video, source').forEach(function(el) {
           var src = el.src || el.getAttribute('src');
-          if (src && src.startsWith('http')) {
-            entries.push({url: src, type: 'video', title: el.getAttribute('data-title') || ''});
+          if (src && src.indexOf('http') === 0) {
+            entries.push(JSON.stringify({url: src, type: 'video'}));
           }
         });
         
-        // HLS-Streams (.m3u8)
-        document.querySelectorAll('video, source').forEach(function(el) {
-          var src = el.src || el.getAttribute('src');
-          if (src && src.includes('.m3u8')) {
-            entries.push({url: src, type: 'hls', title: el.getAttribute('data-title') || ''});
-          }
-        });
-        
-        // DASH-Streams (.mpd)
-        document.querySelectorAll('video, source').forEach(function(el) {
-          var src = el.src || el.getAttribute('src');
-          if (src && src.includes('.mpd')) {
-            entries.push({url: src, type: 'dash', title: el.getAttribute('data-title') || ''});
-          }
-        });
-        
-        // Skript-Inhalte nach .m3u8/.mpd durchsuchen
+        // HLS-Streams (.m3u8) in Skript-Tags
         document.querySelectorAll('script').forEach(function(script) {
           var text = script.textContent || '';
-          var urls = text.match(/https?:\/\/[^\s"']+\.(m3u8|mpd)/gi);
+          var urls = text.match(/https?:\\/\\/[^\\s"']+\\.m3u8/gi);
           if (urls) {
             urls.forEach(function(url) {
-              entries.push({url: url, type: 'manifest', title: ''});
+              entries.push(JSON.stringify({url: url, type: 'hls'}));
             });
           }
         });
         
-        // JSON.stringify für Rückgabe
+        // DASH-Streams (.mpd)
+        document.querySelectorAll('script').forEach(function(script) {
+          var text = script.textContent || '';
+          var urls = text.match(/https?:\\/\\/[^\\s"']+\\.mpd/gi);
+          if (urls) {
+            urls.forEach(function(url) {
+              entries.push(JSON.stringify({url: url, type: 'dash'}));
+            });
+          }
+        });
+        
         return JSON.stringify(entries);
       })();
-    ''');
+    ''') ?? '[]';
 
-    if (result == null) return [];
+    if (result == '[]') return [];
     final List<dynamic> parsed = jsonDecode(result);
-    return parsed.map((item) => VideoEntry.fromJson(item)).toList();
+    return parsed.map((item) => VideoEntry.fromJson(jsonDecode(item))).toList();
   }
 
-  /// Native Download via dart:io
+  /// Native Download via dart:io HTTP-Streaming
   static Future<VideoEntry> download(String url, {String title = ''}) async {
     final entry = VideoEntry(
       url: url,
       type: _detectType(url),
-      title: title,
-      status: DownloadStatus.pending,
+      title: title.isNotEmpty ? title : 'video_${DateTime.now().millisecondsSinceEpoch}',
+      status: DownloadStatus.downloading,
       progress: 0.0,
     );
     downloads.add(entry);
 
     final dir = await getApplicationDocumentsDirectory();
-    final filename = title.isNotEmpty ? '$title.mp4' : 'video_${DateTime.now().millisecondsSinceEpoch}.mp4';
+    final filename = '${entry.title}.mp4';
     final file = File('${dir.path}/$filename');
-
-    entry.status = DownloadStatus.downloading;
 
     try {
       final client = HttpClient();
       final request = await client.getUrl(Uri.parse(url));
       final response = await request.close();
 
-      if (response.statusCode != 200) {
+      if (response.statusCode != HttpStatus.ok) {
         entry.status = DownloadStatus.failed;
         return entry;
       }
 
       final contentLength = response.contentLength;
-      var received = 0;
-
       entry.totalBytes = contentLength;
 
+      var received = 0;
       final sink = file.openWrite();
+      
       response.listen(
         (chunk) {
           sink.add(chunk);
           received += chunk.length;
           entry.receivedBytes = received;
-          entry.progress = contentLength > 0 ? received / contentLength : 0.0;
+          if (contentLength > 0) {
+            entry.progress = received / contentLength;
+          }
         },
         onDone: () async {
           await sink.flush();
@@ -150,7 +144,7 @@ class VideoEntry {
     return VideoEntry(
       url: json['url'] ?? '',
       type: json['type'] ?? 'video',
-      title: json['title'] ?? '',
+      title: '',
       status: DownloadStatus.pending,
       progress: 0.0,
     );
