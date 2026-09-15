@@ -59,7 +59,7 @@ class AdBlockEngine {
     var node = _domainTrie;
     for (final part in parts) {
       if (!node.containsKey(part)) {
-        node[part] = {};
+        node[part] = <String, dynamic>{};
       }
       node = node[part] as Map<String, dynamic>;
     }
