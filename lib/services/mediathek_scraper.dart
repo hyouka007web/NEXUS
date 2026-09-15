@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:http/http.dart' as http;
 
 /// ARD-Mediathek-Scraper: Extrahiert Video-URLs, Titel, und Metadaten.
 /// Nutzt Scrapling-Style Deep-Scraping (JSON-LD, API-Pfade, Regex-Fallback).
@@ -111,7 +110,7 @@ class MediathekScraper {
       title: title,
       streamUrls: streams,
       thumbnailUrl: thumbnail,
-      duration: data['duration'] ?? 0,
+      duration: int.tryParse(data["duration"].toString()) ?? 0,
     );
   }
 
