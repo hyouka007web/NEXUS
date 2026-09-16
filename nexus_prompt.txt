@@ -1,8 +1,0 @@
-NEXUS BROWSER — COMPREHENSIVE ARCHITECTURE & FULL IMPLEMENTATION SPECIFICATION
-
-1. flutter_inappwebview: shouldInterceptRequest für Adblock
-2. Adblock mit ad_block_flutter + Trie/Bloom-Filter
-3. shouldOverrideUrlLoading: Redirect-Ketten zählen
-4. onCreateWindow: nur bei echter User-Geste (window.open)
-5. Video-Downloader: JS-Injection (evaluateJavascript) + dart:io HTTP-Streaming
-6. Mediathek für Downloads mit Fortschritt/Offline-Player
