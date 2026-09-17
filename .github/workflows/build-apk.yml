@@ -36,14 +36,21 @@ jobs:
       - name: Verify Flutter installation
         run: flutter --version
 
+      - name: Create local.properties (CI has no flutter.local.properties)
+        run: |
+          echo "flutter.sdk=$$FLUTTER_ROOT" > android/local.properties
+          echo "flutter.versionCode=1" >> android/local.properties
+          echo "flutter.versionName=0.2.0" >> android/local.properties
+          cat android/local.properties
+
       - name: Install dependencies
         run: flutter pub get
 
       - name: Analyze code (optional, non-blocking)
         run: flutter analyze || echo "Analysis completed with warnings"
 
-      - name: Build APK (release)
-        run: flutter build apk --release --split-per-abi
+      - name: Build APK (release, split per ABI)
+        run: flutter build apk --release --split-per-abi --no-daemon
 
       - name: Collect APK artifacts
         uses: actions/upload-artifact@v4
