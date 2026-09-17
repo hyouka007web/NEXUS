@@ -9,6 +9,7 @@ def flutterSdkPath = {
     return flutterSdkPath
 }()
 
+settings.ext.flutterSdkPath = flutterSdkPath
 includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
 
 pluginManagement {
@@ -20,12 +21,19 @@ pluginManagement {
         }
         return properties.getProperty('flutter.sdk')
     }()
+    settings.ext.flutterSdkPath = flutterSdkPath
     includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
 
     repositories {
         google()
         mavenCentral()
         gradlePluginPortal()
+    }
+
+    plugins {
+        id 'dev.flutter.flutter' version '1.0.0' apply false
+        id 'com.android.application' version '8.3.0' apply false
+        id 'org.jetbrains.kotlin.android' version '1.9.24' apply false
     }
 }
 
